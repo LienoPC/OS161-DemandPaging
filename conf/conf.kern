@@ -378,10 +378,6 @@ file      vfs/devnull.c
 
 file      syscall/loadelf.c
 file      syscall/runprogram.c
-file      syscall/time_syscalls.c
-file      syscall/file_syscalls.c
-file      syscall/proc_syscalls.c
-
 #
 # Startup and initialization
 #
@@ -453,3 +449,10 @@ defoption syscalls
 optfile syscalls syscall/file_syscalls.c
 optfile syscalls syscall/proc_syscalls.c
 optfile syscalls syscall/time_syscalls.c
+
+# PAGING EXTENSION
+defoption paging
+
+defoption waitpid
+defoption fork
+defoption synch
