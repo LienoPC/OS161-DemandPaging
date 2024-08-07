@@ -40,6 +40,9 @@
  * used. The cheesy hack versions in dumbvm.c are used instead.
  */
 
+
+
+
 struct addrspace *
 as_create(void)
 {
@@ -179,4 +182,6 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 
 	return 0;
 }
+
+
 

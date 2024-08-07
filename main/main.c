@@ -49,6 +49,7 @@
 #include <syscall.h>
 #include <test.h>
 #include <version.h>
+#include <pt.h>
 #include "autoconf.h"  // for pseudoconfig
 #include "opt-hello.h"
 
