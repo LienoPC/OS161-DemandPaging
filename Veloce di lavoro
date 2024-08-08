@@ -1,0 +1,45 @@
+Sequenza di lavoro
+•	Creare il supporto per gestire la TLB e l’algoritmo che faccia il replacement sulla tabella (da aggiungere nella funzione di inserimento di una entry della TLB)
+•	Creare la struct e lo spazio di memoria per la Page Table (Secondo me è più semplice una IPT, ma vediamo)
+•	Creare le funzioni per aggiungere entry alla Page Table e quindi implementare il page replacement algorithm
+•	Gestione della suddivisione dello spazio di indirizzamento di un processo utente in pagine e associazione ai frame con l’inserimento di entry nella PT
+TLB
+•	Implementare l’accesso alla TLB per la traduzione logico-fisico
+•	Implementare la creazione/inserimento/sostituzione di una entry 
+•	Implementare l’algoritmo di replacement
+•	Implementare la gestione delle pagine Read Only
+•	Sollevamento di una memory exception dal MIPS MMU
+DEMAND PAGING
+•	Creazione della PT (oppure no nel caso di IPT) all’invocazione di runprogram
+•	Consideriamo l’intero spazio di indirizzamento come una suddivisione contigua, per cui il numero di pagina associato ad un indirizzo logico L_ADDR sarà semplicemente N_PAGE = L_ADDR / PAGE_SIZE + la grandezza dei dati presi che potrebbero coprire più pagine -> Questo è la creazione dello spazio di indirizzamento sotto forma di paginazione indipendente dalla gestione tramite demand paging
+•	Gestione della traduzione pagine logiche/fisiche tramite l’uso della TLB
+•	Per ogni accesso allo spazio di indirizzamento si accede alla TLB:
+-Se la pagina è in memoria allora si accede tramite mapping
+-Se la pagina non è in memoria si attiva il demand paging
+•	Il demand paging parte come un exception (perché deve usare codice del kernel) alloca una o più pagine da caricare
+•	Si leggono poi le pagine dal file ELF dell’eseguibile (OPPURE dallo SWAPFILE se già caricati in precedenza)
+•	Aggiornare la page table
+•	Aggiornare la TLB
+•	Ritornare dall’exception e far ripartire il processo utente con un nuovo accesso alla TLB
+•	CARICAMENTO DEI SEGMENT DAL FILE ELF IN SWAPFILE: modifica della load_elf in modo da mappare ogni segmento allo spazio di indirizzamento corretto in page table (primo giro nella load_elf, quando si leggono solo gli header) e nel secondo giro della load elf si copiano i segmenti nello swapfile (qui forse serve una struttura logica per mantenere i riferimenti/posizioni nello swapfile)
+
+1. Definizione delle tre strutture base
+Free frame management nel coremap.h, addrspace modificato in addrspace.h (che dovrebbe contenere anche la page table e in generale il mapping tra segments (vmemory) e memoria fisica), mantenimento delle informazioni estratte dal file elf riguardo ai segments in segments.h.
+
+Il coremap potrebbe essere implementato come:
+-Bitmap, pensata con un algoritmo di mappatura che favorisca l’allocazione di pagine contigue, anche se comunque gestito interamente tramite Page Table. Questo dovrebbe aiutare dato che l’allocazione delle pagine per la memoria di kernel serve essere tutta continua (dato che il kernel alloca tramite kmalloc tutte strutture che non possono funzionare a paginazione (struct ecc.), ci serve per il kernel l’allocazione contigua)
+-Free frame list, paginazione a libero
+Una soluzione per risolvere il problema di mancanza di memoria contigua per il kernel è fare lo swap out di pagine che stanno in memoria (del processo user) nello spazio in cui vogliamo allocare contiguamente e poi la paginazione on demand gestirà con la bitmap il problema indipendentemente, come se fosse un normale page fault (ed eventualmente out of memory se la memoria non è abbastanza)
+
+
+
+
+PAGE REPLACEMENT
+•	Creazione dello swapfile, scrittura/lettura di pagine sullo swapfile
+•	Algoritmo di sostituzione delle pagine
+•	Come minchia facciamo a tenere traccia a quale processo appartiene una pagina sullo swapfile
+•	Gestire il kernel panic “Out of swap space”
+
+STATISTICS
+•	Raccogliere tutte le statistiche in uno spazio di memoria con una struct apposita
+•	Stampare tutte le statistiche quando la vm viene spenta
