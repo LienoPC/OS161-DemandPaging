@@ -30,7 +30,7 @@ Il coremap potrebbe essere implementato come:
 -Bitmap, pensata con un algoritmo di mappatura che favorisca l’allocazione di pagine contigue, anche se comunque gestito interamente tramite Page Table. Questo dovrebbe aiutare dato che l’allocazione delle pagine per la memoria di kernel serve essere tutta continua (dato che il kernel alloca tramite kmalloc tutte strutture che non possono funzionare a paginazione (struct ecc.), ci serve per il kernel l’allocazione contigua)
 -Free frame list, paginazione a libero
 Una soluzione per risolvere il problema di mancanza di memoria contigua per il kernel è fare lo swap out di pagine che stanno in memoria (del processo user) nello spazio in cui vogliamo allocare contiguamente e poi la paginazione on demand gestirà con la bitmap il problema indipendentemente, come se fosse un normale page fault (ed eventualmente out of memory se la memoria non è abbastanza)
-
+Bisogna aggiungere un metodo aggiuntivo nella kmalloc per usare la ram_stealmem prima del bootstrap della struttura di coremap
 
 
 
