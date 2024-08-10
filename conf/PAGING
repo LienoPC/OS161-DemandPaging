@@ -34,3 +34,4 @@ options sfs			# Always use the file system
 #options dumbvm
 options syscalls # activates the system call functionalities
 options paging # activates all the added features for the project c1
+#options tlb_management # acivates tlb management

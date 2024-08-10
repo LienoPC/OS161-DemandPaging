@@ -13,4 +13,5 @@ main.o: ../../main/main.c ../../include/types.h \
  ../../include/vm.h includelinks/machine/vm.h ../../include/mainbus.h \
  ../../include/vfs.h ../../include/device.h ../../include/syscall.h \
  opt-syscalls.h opt-fork.h ../../include/test.h ../../include/version.h \
- ../../include/pt.h opt-paging.h autoconf.h opt-hello.h
+ ../../include/pt.h opt-paging.h autoconf.h opt-hello.h \
+ opt-tlb_management.h

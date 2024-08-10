@@ -459,6 +459,8 @@ optfile paging vm/swapfile.c
 optfile paging vm/vm_tlb.c
 optfile paging vm/vmstats.c
 
+defoption tlb_management
+
 defoption waitpid
 defoption fork
 defoption synch
