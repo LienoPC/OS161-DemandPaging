@@ -210,18 +210,13 @@ sys_reboot(int code)
 void
 kmain(char *arguments)
 {
+
+	kprintf("Entrare nel main");
 	boot();
 
-/*
-
-#if OPT_HELLO
-	hello();
-#endif	
-*/
 
 	
 	menu(arguments);
 
-	
-	/* Should not get here */
+
 }

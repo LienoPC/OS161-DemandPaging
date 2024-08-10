@@ -31,7 +31,6 @@
 #include <lib.h>
 #include <spinlock.h>
 #include <vm.h>
-
 /*
  * Kernel malloc.
  */

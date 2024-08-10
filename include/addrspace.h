@@ -35,6 +35,7 @@
  */
 
 
+//#include <types.h>
 #include <vm.h>
 #include "opt-dumbvm.h"
 

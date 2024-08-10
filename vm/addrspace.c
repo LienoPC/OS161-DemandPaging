@@ -41,7 +41,9 @@
  */
 
 
+#if OPT_DUMBVM
 
+#else
 
 struct addrspace *
 as_create(void)
@@ -183,5 +185,5 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	return 0;
 }
 
-
+#endif
 

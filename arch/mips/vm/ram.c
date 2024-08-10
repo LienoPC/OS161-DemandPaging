@@ -31,6 +31,7 @@
 #include <lib.h>
 #include <vm.h>
 #include <mainbus.h>
+#include <opt-paging.h>
 
 
 vaddr_t firstfree;   /* first free virtual address; set by start.S */
@@ -151,3 +152,15 @@ ram_getfirstfree(void)
 	firstpaddr = lastpaddr = 0;
 	return ret;
 }
+
+/*
+	Function used in the coremap_bootstrap only to get the first paddress
+	after the usage of ram_stealmem (that should be used only during the vm/coremap bootstraps)
+*/
+
+#if OPT_PAGING
+paddr_t
+ram_getfirstfreeaddr(void){
+	return firstpaddr;
+}
+#endif
