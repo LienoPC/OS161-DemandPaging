@@ -33,4 +33,3 @@ options sfs			# Always use the file system
 
 options dumbvm			# Chewing gum and baling wire.
 options syscalls
-#options tlb_management # used for tlb initial testing

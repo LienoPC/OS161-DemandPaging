@@ -52,11 +52,8 @@
 #include <pt.h>
 #include "autoconf.h"  // for pseudoconfig
 #include "opt-hello.h"
-#include "opt-tlb_management.h"
 
-#if OPT_TLB_MANAGEMENT
-#include "../arch/mips/include/tlb.h"
-#endif
+// #include "../arch/mips/include/tlb.h"
 
 
 /*
@@ -218,7 +215,7 @@ kmain(char *arguments)
 	//kprintf("Entrare nel main");
 	boot();
 
-#if OPT_TLB_MANAGEMENT
+	/*
 	uint32_t vaddr = 0xaaaaa1c3;
 	uint32_t vpage = vaddr & TLBHI_VPAGE;
 	kprintf("vaddr: %05x - vpage: %05x\n", vaddr, vpage);
@@ -248,7 +245,7 @@ kmain(char *arguments)
 	index = tlb_probe(TLBHI_INVALID(1), TLBLO_INVALID());
 	tlb_read(&entryhi, &entrylo, 1);
 	kprintf("index: %d\nentryhi: %05x\nentrylo: %05x\n", index, entryhi, entrylo);
-#endif
+	*/
 
 	menu(arguments);
 }

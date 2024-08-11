@@ -38,8 +38,7 @@
 #include <mips/tlb.h>
 #include <addrspace.h>
 #include <vm.h>
-#include <pt.h>
-
+#include <opt-paging.h>
 
 #if OPT_PAGING
 
@@ -121,8 +120,60 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 { 
-	(void) faulttype;
-	(void) faultaddress;
+	// uint32_t ehi, elo;
+	struct addrspace *as;
+
+	faultaddress &= PAGE_FRAME;
+
+	DEBUG(DB_VM, "dumbvm: fault: 0x%x\n", faultaddress);
+
+	switch (faulttype) {
+	    case VM_FAULT_READONLY:
+		/* Text segment pages must be readonly, so this can happen */
+		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
+		break;
+	    case VM_FAULT_READ:
+		DEBUG(DB_VM, "VM_FAULT_READ\n");
+		break;
+	    case VM_FAULT_WRITE:
+		DEBUG(DB_VM, "VM_FAULT_WRITE\n");
+		break;
+	    default:
+		return EINVAL;
+	}
+
+	if (curproc == NULL) {
+		/*
+		 * No process. This is probably a kernel fault early
+		 * in boot. Return EFAULT so as to panic instead of
+		 * getting into an infinite faulting loop.
+		 */
+		return EFAULT;
+	}
+
+	as = proc_getas();
+	if (as == NULL) {
+		/*
+		 * No address space set up. This is probably also a
+		 * kernel fault early in boot.
+		 */
+		return EFAULT;
+	}
+
+	/* Assert that the address space has been set up properly. */
+	// TODO!
+
+	/* 
+		If faultaddress is already in memory, load the appropriate paddr in the TLB,
+	   	setting the dirty bit according to faultaddress' segment.
+	   	Else: the page must be loaded from the elf to ram, the PT must be updated
+	   	and then the newly mapped paddr must be loaded in the TLB
+	*/
+
+	/*
+		TLB replacement algorithm
+	*/
+
 	return 0;
 }
 
