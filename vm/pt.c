@@ -139,9 +139,10 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 { 
-	uint32_t ehi, elo;
+	vaddr_t vbase1, vtop1;
 	paddr_t paddr;
 	struct addrspace *as;
+	bool readonly;
 
 	faultaddress &= PAGE_FRAME;
 
@@ -189,12 +190,23 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	KASSERT((as->segs.as_vbase2 & PAGE_FRAME) == as->segs.as_vbase2);
 	KASSERT((as->segs.as_stackvbase & PAGE_FRAME) == as->segs.as_stackvbase);
 
+	vbase1 = as->segs.as_vbase1;
+	vtop1 = vbase1 + as->segs.as_npages1 * PAGE_SIZE;
+	
+	/* 
+	 * Check if faultaddress belongs to the program's text segment.
+	 * If so, the new TLB entry will have the dirty bit cleared
+	*/
+	if (faultaddress >= vbase1 && faultaddress < vtop1) {
+		readonly = true;
+	}
+
 	/* 
 		If faultaddress is already in memory, load the appropriate paddr in the TLB,
 	   	setting the dirty bit according to faultaddress' segment.
 
 		if(pt_getppage(faultaddress) is a valid ppage) {...}
-	/*
+
 	   	Else: the page must be loaded from the elf to ram, the PT must be updated
 	   	and then the newly mapped paddr must be loaded in the TLB
 
@@ -204,9 +216,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	/* make sure paddr is page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
-	/*
-		TLB replacement algorithm
-	*/
+	tlb_loadpage(faultaddress, paddr, readonly);
 	return 0;
 }
 
