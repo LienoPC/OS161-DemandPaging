@@ -182,6 +182,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	return 0;
 }
 
+/*
+	CREATE THE PAGE TABLE AND SEGMENTS STRUCT OF A PROCESS
+*/
+
 struct addrspace *
 as_create(void)
 {
@@ -192,10 +196,11 @@ as_create(void)
 		return NULL;
 	}
 
-	/*
-	 * Initialize as needed.
-	 */
 
+	/* 	We initialize the page table only after defining regions
+		(and knowing the dimension of the virtual memory)
+	*/
+	
 	return as;
 }
 
@@ -210,10 +215,24 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	}
 
 	/*
-	 * Write this.
+	 * 	Copy the page table
 	 */
+	newas->frames = kmalloc(sizeof(paddr_t)*old->n_entry);
+	newas->control_bits = kmalloc(sizeof(unsigned char)*old->n_entry);
+	newas->n_entry = old->n_entry;
+	
+	memmove((void *)newas->frames,
+		(const void *)old->frames,
+		sizeof(paddr_t)*old->n_entry);
 
-	(void)old;
+	memmove((void *)newas->control_bits,
+	(const void *)old->control_bits,
+	sizeof(unsigned char)*old->n_entry);
+
+	/*
+		Copy the segments structure
+	*/
+	newas->segs = old->segs;
 
 	*ret = newas;
 	return 0;
@@ -223,8 +242,23 @@ void
 as_destroy(struct addrspace *as)
 {
 	/*
-	 * Clean up as needed.
-	 */
+		Free all allocated frames 
+	*/
+	int i;
+	for (i = 0; i < as->n_entry; i++){
+		if ((as->control_bits[i] & PT_VALID_BIT) == PT_VALID_BIT){
+			// Valid entry, frame has to be freed
+			releaseframe(as->frames[i]);
+		}
+	}
+
+	/*
+		Destroy all addrspace structures (page table and segments)
+	*/
+	kfree(as->frames);
+	kfree(as->control_bits);
+	/* TODO: aggiungere distruzione dello swapfile */
+
 
 	kfree(as);
 }
@@ -232,6 +266,7 @@ as_destroy(struct addrspace *as)
 void
 as_activate(void)
 {
+	int i, spl;
 	struct addrspace *as;
 
 	as = proc_getas();
@@ -242,10 +277,14 @@ as_activate(void)
 		 */
 		return;
 	}
+	/* Disable interrupts on this CPU while frobbing the TLB. */
+	spl = splhigh();
 
-	/*
-	 * Write this.
-	 */
+	for (i=0; i<NUM_TLB; i++) {
+		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
+	}
+
+	splx(spl);
 }
 
 void
@@ -258,20 +297,11 @@ as_deactivate(void)
 	 */
 }
 
-/*
- * Set up a segment at virtual address VADDR of size MEMSIZE. The
- * segment in memory extends from VADDR up to (but not including)
- * VADDR+MEMSIZE.
- *
- * The READABLE, WRITEABLE, and EXECUTABLE flags are set if read,
- * write, or execute permission should be set on the segment. At the
- * moment, these are ignored. When you write the VM system, you may
- * want to implement them.
- */
 int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		 int readable, int writeable, int executable)
 {
+
 	/*
 	 * Write this.
 	 */
@@ -284,6 +314,23 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	(void)executable;
 	return ENOSYS;
 }
+
+int
+as_define_stack(struct addrspace *as, vaddr_t *stackptr)
+{
+	/*
+	 * Write this.
+	 */
+
+	(void)as;
+
+	/* Initial user-level stack pointer */
+	*stackptr = USERSTACK;
+
+	return 0;
+}
+
+/* SHOULD NOT BE NEEDED */
 
 int
 as_prepare_load(struct addrspace *as)
@@ -307,17 +354,4 @@ as_complete_load(struct addrspace *as)
 	return 0;
 }
 
-int
-as_define_stack(struct addrspace *as, vaddr_t *stackptr)
-{
-	/*
-	 * Write this.
-	 */
 
-	(void)as;
-
-	/* Initial user-level stack pointer */
-	*stackptr = USERSTACK;
-
-	return 0;
-}
