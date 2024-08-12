@@ -216,7 +216,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	/* make sure paddr is page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
-	tlb_loadpage(faultaddress, paddr, readonly);
+	tlb_loadentry(faultaddress, paddr, readonly);
 	return 0;
 }
 

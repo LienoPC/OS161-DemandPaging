@@ -3,7 +3,7 @@
 #include <../arch/mips/include/tlb.h>
 #include <vm_tlb.h>
 
-void tlb_loadpage(vaddr_t vaddr, paddr_t paddr, bool readonly) {
+void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 	struct addrspace *as;
 	uint32_t ehi, elo, index;
 	int spl;
