@@ -38,6 +38,7 @@
 #include <mips/tlb.h>
 #include <segments.h>
 #include <addrspace.h>
+#include <vm_tlb.h>
 #include <vm.h>
 #include <pt.h>
 #include <coremap.h>
@@ -138,7 +139,8 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 { 
-	// uint32_t ehi, elo;
+	uint32_t ehi, elo;
+	paddr_t paddr;
 	struct addrspace *as;
 
 	faultaddress &= PAGE_FRAME;
@@ -179,14 +181,28 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	/* Assert that the address space has been set up properly. */
-	// TODO!
+	KASSERT(as->segs.as_vbase1 != 0);
+	KASSERT(as->segs.as_vbase2 != 0);
+	KASSERT(as->segs.as_stackvbase != 0);
+	KASSERT(as->segs.as_stackvtop  != 0);
+	KASSERT((as->segs.as_vbase1 & PAGE_FRAME) == as->segs.as_vbase1);
+	KASSERT((as->segs.as_vbase2 & PAGE_FRAME) == as->segs.as_vbase2);
+	KASSERT((as->segs.as_stackvbase & PAGE_FRAME) == as->segs.as_stackvbase);
 
 	/* 
 		If faultaddress is already in memory, load the appropriate paddr in the TLB,
 	   	setting the dirty bit according to faultaddress' segment.
+
+		if(pt_getppage(faultaddress) is a valid ppage) {...}
+	/*
 	   	Else: the page must be loaded from the elf to ram, the PT must be updated
 	   	and then the newly mapped paddr must be loaded in the TLB
+
+		tlb_load(pt_loadpage(faultaddress))
 	*/
+
+	/* make sure paddr is page-aligned */
+	KASSERT((paddr & PAGE_FRAME) == paddr);
 
 	/*
 		TLB replacement algorithm
