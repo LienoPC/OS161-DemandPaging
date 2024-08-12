@@ -67,6 +67,7 @@ struct addrspace {
         paddr_t *frames;
         unsigned char     *control_bits; // VDR: V - valid bit, D - dirty bit, R - reference bit
         int n_entry;
+        struct segments segs; // Elf header segments
 #endif
 };
 

@@ -36,7 +36,9 @@
 #include <proc.h>
 #include <current.h>
 #include <mips/tlb.h>
+#include <segments.h>
 #include <addrspace.h>
+#include <vm_tlb.h>
 #include <vm.h>
 #include <pt.h>
 #include <coremap.h>
@@ -97,7 +99,7 @@ alloc_kpages(unsigned npages)
 	if (isCoremapActive()) {
 		/* Use standard paging methods */
 		pa = getcontinuousalloc((int)npages);
-		if (pa == NULL){
+		if (pa == (paddr_t) NULL){
 			/* Could not find enough continuous pages, we should steal user pages  */
 			/* TODO */
 			
@@ -137,30 +139,30 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 { 
-	(void) faulttype;
-	(void) faultaddress;
-	int i;
-	uint32_t ehi, elo;
+	vaddr_t vbase1, vtop1;
+	paddr_t paddr;
 	struct addrspace *as;
+	bool readonly;
 
 	faultaddress &= PAGE_FRAME;
 
-	DEBUG(DB_VM, "paging_vm: fault: 0x%x\n", faultaddress);
+	DEBUG(DB_VM, "dumbvm: fault: 0x%x\n", faultaddress);
 
 	switch (faulttype) {
 	    case VM_FAULT_READONLY:
-			/* Tried to access a read-only page */
-			break;
+		/* Text segment pages must be readonly, so this can happen */
+		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
+		break;
 	    case VM_FAULT_READ:
-			/* TLB miss on read an address */
+		DEBUG(DB_VM, "VM_FAULT_READ\n");
+		break;
 	    case VM_FAULT_WRITE:
-			/* TLB miss on write on an address */
-			break;
+		DEBUG(DB_VM, "VM_FAULT_WRITE\n");
+		break;
 	    default:
-			return EINVAL;
+		return EINVAL;
 	}
 
-	/* It's the same code for read or write faults*/
 	if (curproc == NULL) {
 		/*
 		 * No process. This is probably a kernel fault early
@@ -179,6 +181,42 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
+	/* Assert that the address space has been set up properly. */
+	KASSERT(as->segs.as_vbase1 != 0);
+	KASSERT(as->segs.as_vbase2 != 0);
+	KASSERT(as->segs.as_stackvbase != 0);
+	KASSERT(as->segs.as_stackvtop  != 0);
+	KASSERT((as->segs.as_vbase1 & PAGE_FRAME) == as->segs.as_vbase1);
+	KASSERT((as->segs.as_vbase2 & PAGE_FRAME) == as->segs.as_vbase2);
+	KASSERT((as->segs.as_stackvbase & PAGE_FRAME) == as->segs.as_stackvbase);
+
+	vbase1 = as->segs.as_vbase1;
+	vtop1 = vbase1 + as->segs.as_npages1 * PAGE_SIZE;
+	
+	/* 
+	 * Check if faultaddress belongs to the program's text segment.
+	 * If so, the new TLB entry will have the dirty bit cleared
+	*/
+	if (faultaddress >= vbase1 && faultaddress < vtop1) {
+		readonly = true;
+	}
+
+	/* 
+		If faultaddress is already in memory, load the appropriate paddr in the TLB,
+	   	setting the dirty bit according to faultaddress' segment.
+
+		if(pt_getppage(faultaddress) is a valid ppage) {...}
+
+	   	Else: the page must be loaded from the elf to ram, the PT must be updated
+	   	and then the newly mapped paddr must be loaded in the TLB
+
+		tlb_load(pt_loadpage(faultaddress))
+	*/
+
+	/* make sure paddr is page-aligned */
+	KASSERT((paddr & PAGE_FRAME) == paddr);
+
+	tlb_loadentry(faultaddress, paddr, readonly);
 	return 0;
 }
 
