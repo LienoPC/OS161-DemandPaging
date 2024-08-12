@@ -16,7 +16,7 @@ static int bootstrap_completed = 0; // Check if the coremap is active and choose
 static struct spinlock bootstrap_lock = SPINLOCK_INITIALIZER;
 static struct coremap_t *coremap;
 
-/*
+
 int
 isCoremapActive(){
     int active;
@@ -26,7 +26,7 @@ isCoremapActive(){
     return active;
 }
 
-*/
+
              
 
 
@@ -53,6 +53,7 @@ coremap_bootstrap(void){
     }
     /* Calculate the number of pages used by the coremap and occupied using ram_stealmem*/
     bootstrap_pages = ram_getfirstfreeaddr()/PAGE_SIZE;
+    /* AGGIUNGERE RIFERIMENTO AD ALLOCSIZE COME BLOCCO INTERO */
     for(i = 0; i < bootstrap_pages; i++){
         coremap->bitmap[i] = 0;
     }
@@ -103,15 +104,15 @@ paddr_t getcontinuousalloc(int npages){
     int i,first,found;
     spinlock_acquire(&coremap->coremap_lock);
     for (i=0,first=found=-1; i<coremap->nRamFrames; i++) {
-    if (coremap->bitmap[i] == 1) {
-      if (i==0 || !coremap->bitmap[i-1]) 
-        first = i; /* set first free in an interval */   
-      if (i-first+1 >= npages) {
-        found = first;
-        break;
-      }
+        if (coremap->bitmap[i] == 1) {
+            if (i==0 || !coremap->bitmap[i-1]) 
+                first = i; /* set first free in an interval */   
+            if (i-first+1 >= npages) {
+                found = first;
+                break;
+            }
+        }
     }
-  }
 	
   if (found>=0) {
     for (i=found; i<found+npages; i++) {

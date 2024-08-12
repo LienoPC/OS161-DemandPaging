@@ -34,6 +34,10 @@
  * Address space structure and operations.
  */
 
+#define PT_REFERENCE_BIT 0x1
+#define PT_DIRTY_BIT 0x2
+#define PT_VALID_BIT 0x4
+
 
 //#include <types.h>
 #include <vm.h>
@@ -58,8 +62,11 @@ struct addrspace {
         paddr_t as_pbase2;
         size_t as_npages2;
         paddr_t as_stackpbase;
-#else
-        /* Put stuff here for your VM system */
+#elif OPT_PAGING
+        /* Page Table */
+        paddr_t *frames;
+        unsigned char     *control_bits; // VDR: V - valid bit, D - dirty bit, R - reference bit
+        struct segments segs; // Elf header segments
 #endif
 };
 

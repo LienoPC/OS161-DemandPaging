@@ -32,7 +32,8 @@ Il coremap potrebbe essere implementato come:
 Una soluzione per risolvere il problema di mancanza di memoria contigua per il kernel è fare lo swap out di pagine che stanno in memoria (del processo user) nello spazio in cui vogliamo allocare contiguamente e poi la paginazione on demand gestirà con la bitmap il problema indipendentemente, come se fosse un normale page fault (ed eventualmente out of memory se la memoria non è abbastanza)
 Bisogna aggiungere un metodo aggiuntivo nella kmalloc per usare la ram_stealmem prima del bootstrap della struttura di coremap
 
-
+Per la page table si è scelti un vettore di p_addr a cui è associato un vettore di unsigned char corrispondenti ai bit (Valid, Dirty e Reference). Bisogna aggiungere un meccanismo
+di traduzione per le pagine dello stack, che verrebbero normalmente mappate su indirizzi alti dello spazio logico, lasciando un gap di pagine inutilizzate nel vettore della page table.
 
 PAGE REPLACEMENT
 •	Creazione dello swapfile, scrittura/lettura di pagine sullo swapfile

@@ -237,11 +237,18 @@ allocpagerefpage(struct kheap_root *root)
 	KASSERT(va % PAGE_SIZE == 0);
 
 	if (root->page != NULL) {
+		#if OPT_PAGING
+		spinlock_release(&kmalloc_spinlock);
+		free_kpages(va, 1);
+		spinlock_acquire(&kmalloc_spinlock);
+
+		#else
 		/* Oops, somebody else allocated it. */
 		spinlock_release(&kmalloc_spinlock);
 		free_kpages(va);
 		spinlock_acquire(&kmalloc_spinlock);
 		/* Once allocated it isn't ever freed. */
+		#endif
 		KASSERT(root->page != NULL);
 		return;
 	}
@@ -869,6 +876,9 @@ int blocktype(size_t clientsz)
  * Allocate a block of size SZ, where SZ is not large enough to
  * warrant a whole-page allocation.
  */
+
+
+
 static
 void *
 subpage_kmalloc(size_t sz
@@ -979,8 +989,14 @@ subpage_kmalloc(size_t sz
 	pr = allocpageref();
 	if (pr==NULL) {
 		/* Couldn't allocate accounting space for the new page. */
+		#if OPT_PAGING
+		spinlock_release(&kmalloc_spinlock);
+		free_kpages(prpage,1);
+		#else
 		spinlock_release(&kmalloc_spinlock);
 		free_kpages(prpage);
+		#endif
+		
 		kprintf("kmalloc: Subpage allocator couldn't get pageref\n");
 		return NULL;
 	}
@@ -1143,7 +1159,13 @@ subpage_kfree(void *ptr)
 		freepageref(pr);
 		/* Call free_kpages without kmalloc_spinlock. */
 		spinlock_release(&kmalloc_spinlock);
+		#if OPT_PAGING
+		free_kpages(prpage, 1);
+		#else
 		free_kpages(prpage);
+		#endif
+		 
+		
 	}
 	else {
 		spinlock_release(&kmalloc_spinlock);
@@ -1217,6 +1239,7 @@ kfree(void *ptr)
 		return;
 	} else if (subpage_kfree(ptr)) {
 		KASSERT((vaddr_t)ptr%PAGE_SIZE==0);
+		
 		free_kpages((vaddr_t)ptr);
 	}
 }
