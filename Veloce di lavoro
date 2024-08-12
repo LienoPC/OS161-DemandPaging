@@ -9,7 +9,6 @@ TLB
 •	Implementare l’algoritmo di replacement
 •	Implementare la gestione delle pagine Read Only
     • Capire come terminare tutti i thread del processo
-    • Aggiungere free dello stack kernel in thread_exit e controllare che tutte le strutture kernel vengano liberate correttamente
 •	Sollevamento di una memory exception dal MIPS MMU
 DEMAND PAGING
 •	Creazione della PT (oppure no nel caso di IPT) all’invocazione di runprogram
