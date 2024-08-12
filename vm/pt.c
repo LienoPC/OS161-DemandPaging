@@ -39,9 +39,9 @@
 #include <addrspace.h>
 #include <vm.h>
 #include <pt.h>
+#include <coremap.h>
 
 
-#if OPT_PAGING
 
 /* under dumbvm, always have 72k of user stack */
 /* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
@@ -63,7 +63,7 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 void
 vm_bootstrap(void)
 {
-  
+  coremap_bootstrap();
 }
 
 /*
@@ -92,9 +92,24 @@ vaddr_t
 alloc_kpages(unsigned npages)
 {
 	(void) npages;
+	paddr_t pa;
 	vm_can_sleep();
-	
-	return PADDR_TO_KVADDR((paddr_t) 0x00000);
+	if (isCoremapActive()) {
+		/* Use standard paging methods */
+		pa = getcontinuousalloc((int)npages);
+		if (pa == NULL){
+			/* Could not find enough continuous pages, we should steal user pages  */
+			/* TODO */
+			
+		}
+
+	}else{
+		/* Use ram_stealmem */
+		spinlock_acquire(&stealmem_lock);
+		pa = ram_stealmem(npages);
+		spinlock_release(&stealmem_lock);
+	}
+	return PADDR_TO_KVADDR((paddr_t) pa);
 	
 }
 
@@ -102,13 +117,14 @@ void
 free_kpages(vaddr_t addr){
 (void) addr;
 (void) stealmem_lock;
+	
 }
 
 void
 vm_tlbshootdown(const struct tlbshootdown *ts)
 {
 	(void)ts;
-	panic("dumbvm tried to do tlb shootdown?!\n");
+	panic("vm tried to do tlb shootdown?!\n");
 }
 
 
@@ -123,82 +139,170 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 { 
 	(void) faulttype;
 	(void) faultaddress;
+	int i;
+	uint32_t ehi, elo;
+	struct addrspace *as;
+
+	faultaddress &= PAGE_FRAME;
+
+	DEBUG(DB_VM, "paging_vm: fault: 0x%x\n", faultaddress);
+
+	switch (faulttype) {
+	    case VM_FAULT_READONLY:
+			/* Tried to access a read-only page */
+			break;
+	    case VM_FAULT_READ:
+			/* TLB miss on read an address */
+	    case VM_FAULT_WRITE:
+			/* TLB miss on write on an address */
+			break;
+	    default:
+			return EINVAL;
+	}
+
+	/* It's the same code for read or write faults*/
+	if (curproc == NULL) {
+		/*
+		 * No process. This is probably a kernel fault early
+		 * in boot. Return EFAULT so as to panic instead of
+		 * getting into an infinite faulting loop.
+		 */
+		return EFAULT;
+	}
+
+	as = proc_getas();
+	if (as == NULL) {
+		/*
+		 * No address space set up. This is probably also a
+		 * kernel fault early in boot.
+		 */
+		return EFAULT;
+	}
+
 	return 0;
 }
 
 struct addrspace *
 as_create(void)
 {
-	return NULL;
+	struct addrspace *as;
+
+	as = kmalloc(sizeof(struct addrspace));
+	if (as == NULL) {
+		return NULL;
+	}
+
+	/*
+	 * Initialize as needed.
+	 */
+
+	return as;
 }
 
-void as_destroy(struct addrspace *as){
-	(void) as;
-  vm_can_sleep();
+int
+as_copy(struct addrspace *old, struct addrspace **ret)
+{
+	struct addrspace *newas;
+
+	newas = as_create();
+	if (newas==NULL) {
+		return ENOMEM;
+	}
+
+	/*
+	 * Write this.
+	 */
+
+	(void)old;
+
+	*ret = newas;
+	return 0;
+}
+
+void
+as_destroy(struct addrspace *as)
+{
+	/*
+	 * Clean up as needed.
+	 */
+
+	kfree(as);
 }
 
 void
 as_activate(void)
 {
-	int i, spl;
 	struct addrspace *as;
 
 	as = proc_getas();
 	if (as == NULL) {
+		/*
+		 * Kernel thread without an address space; leave the
+		 * prior address space in place.
+		 */
 		return;
 	}
 
-	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
-
-	for (i=0; i<NUM_TLB; i++) {
-		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-	}
-
-	splx(spl);
+	/*
+	 * Write this.
+	 */
 }
 
 void
 as_deactivate(void)
 {
-	/* nothing */
-}
-
-int
-as_define_region(struct addrspace *as, vaddr_t vaddr, size_t sz,
-		 int readable, int writeable, int executable)
-{
-	(void) as;
-	(void) vaddr;
-	(void) sz;
-	(void) readable;
-	(void) writeable;
-	(void) executable;
-	return 0;
+	/*
+	 * Write this. For many designs it won't need to actually do
+	 * anything. See proc.c for an explanation of why it (might)
+	 * be needed.
+	 */
 }
 
 /*
-static
-void
-as_zero_region(paddr_t paddr, unsigned npages)
+ * Set up a segment at virtual address VADDR of size MEMSIZE. The
+ * segment in memory extends from VADDR up to (but not including)
+ * VADDR+MEMSIZE.
+ *
+ * The READABLE, WRITEABLE, and EXECUTABLE flags are set if read,
+ * write, or execute permission should be set on the segment. At the
+ * moment, these are ignored. When you write the VM system, you may
+ * want to implement them.
+ */
+int
+as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
+		 int readable, int writeable, int executable)
 {
-	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+	/*
+	 * Write this.
+	 */
+
+	(void)as;
+	(void)vaddr;
+	(void)memsize;
+	(void)readable;
+	(void)writeable;
+	(void)executable;
+	return ENOSYS;
 }
-*/
-
-
 
 int
 as_prepare_load(struct addrspace *as)
 {
-	(void) as;
+	/*
+	 * Write this.
+	 */
+
+	(void)as;
 	return 0;
 }
 
 int
 as_complete_load(struct addrspace *as)
 {
-	vm_can_sleep();
+	/*
+	 * Write this.
+	 */
+
 	(void)as;
 	return 0;
 }
@@ -206,17 +310,14 @@ as_complete_load(struct addrspace *as)
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	(void) as;
-	(void) stackptr;
+	/*
+	 * Write this.
+	 */
+
+	(void)as;
+
+	/* Initial user-level stack pointer */
+	*stackptr = USERSTACK;
+
 	return 0;
 }
-
-int
-as_copy(struct addrspace *old, struct addrspace **ret)
-{	
-	(void) old;
-	(void) ret;
-	return 0;
-}
-
-#endif

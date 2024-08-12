@@ -10,6 +10,7 @@
 
 struct coremap_t {
     unsigned char *bitmap; // Bitmap structure
+    int *allocSize; // Vector to mantain information about continuous alloc
     int nRamFrames;// Total number of ram frames outside the initial usage of the ram_stealmem
     struct spinlock coremap_lock;
     int last_frame; // Last allocated frame
