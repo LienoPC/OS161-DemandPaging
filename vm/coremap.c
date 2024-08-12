@@ -48,8 +48,10 @@ coremap_bootstrap(void){
     if (coremap->bitmap == NULL){
          /*problemi nell'allocazione del bootstrap*/
     }
+    coremap->allocSize = kmalloc(sizeof(int) *  coremap->nRamFrames);
     for(i = 0; i < coremap->nRamFrames; i++){
         coremap->bitmap[i] = 1;
+        coremap->allocSize = 0;
     }
     /* Calculate the number of pages used by the coremap and occupied using ram_stealmem*/
     bootstrap_pages = ram_getfirstfreeaddr()/PAGE_SIZE;
@@ -118,6 +120,7 @@ paddr_t getcontinuousalloc(int npages){
     for (i=found; i<found+npages; i++) {
       coremap->bitmap[i] = (unsigned char)0;
     }
+    coremap->allocSize[found] = npages;
     addr = (paddr_t) found*PAGE_SIZE;
   }
   else {
@@ -143,17 +146,33 @@ paddr_t stealcontinuousalloc(int npages, paddr_t first){
     for(i = f_first; i < f_first + npages; i++){
         coremap->bitmap[i] = (unsigned char) 0;
     }
+    coremap->allocSize[f_first] = npages;
     spinlock_release(&coremap->coremap_lock);
     return first;
 
 }
 
 void           
-releaseframe(paddr_t f_addr){
+releaseframe(paddr_t p_addr){
     int f_number;
-    f_number = f_addr/PAGE_SIZE;
+    f_number = p_addr/PAGE_SIZE;
     KASSERT(f_number > 0 && f_number < coremap->nRamFrames);
     spinlock_acquire(&coremap->coremap_lock);
     coremap->bitmap[f_number] = (unsigned char) 1;
     spinlock_release(&coremap->coremap_lock);
+}
+
+
+void
+releasecontiguousalloc(paddr_t p_addr, int npages){
+    int f_number, i;
+    f_number = p_addr/PAGE_SIZE;
+    KASSERT(f_number > 0 && f_number + npages < coremap->nRamFrames);
+    spinlock_acquire(&coremap->coremap_lock);
+    for(i = f_number; i < f_number + npages; i++){
+        coremap->bitmap[f_number] = (unsigned char) 1;
+    }
+    coremap->allocSize[f_number] = 0;
+    spinlock_release(&coremap->coremap_lock);
+
 }
