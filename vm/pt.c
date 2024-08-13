@@ -152,6 +152,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	    case VM_FAULT_READONLY:
 		/* Text segment pages must be readonly, so this can happen */
 		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
+		// TODO: CLEAN PROCESS TERMINATION
+		// How do we terminate all proc threads?
 		break;
 	    case VM_FAULT_READ:
 		DEBUG(DB_VM, "VM_FAULT_READ\n");
