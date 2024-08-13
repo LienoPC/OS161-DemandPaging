@@ -36,6 +36,7 @@
 #include <proc.h>
 #include <current.h>
 #include <mips/tlb.h>
+#include <elf.h>
 #include <segments.h>
 #include <addrspace.h>
 #include <vm_tlb.h>
@@ -287,7 +288,7 @@ pt_pagefault(vaddr_t addr){
 	index = addr/PAGE_SIZE;
 	if (as->control_bits[index] & PT_SWAP_BIT){
 		/* Compute virtual page address offset */
-		if (addr >= as->segs.as_vbase1 && addr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages2)) {
+		if (addr >= as->segs.as_vbase1 && addr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
 			offset = addr - as->segs.as_vbase1;
 			KASSERT((offset & PAGE_FRAME) == offset);
 		}
@@ -297,6 +298,8 @@ pt_pagefault(vaddr_t addr){
 		}
 		else if (addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop) {
 			/* PROBLEMI: lo stack è solo nello swapfile */
+			/* Ma se abbiamo page fault su un suo indirizzo logico non carichiamo un frame
+			come per gli altri segmenti? (Giulio) */
 		}
 		
 		if (load_from_elf(&paddr, as, offset)){
@@ -425,44 +428,77 @@ as_deactivate(void)
 
 int
 as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-		 int readable, int writeable, int executable)
+		 Elf_Phdr ph, int readable, int writeable, int executable)
 {
 
-	/*
-	 * Write this.
-	 */
+	size_t npages;
 
-	(void)as;
-	(void)vaddr;
-	(void)memsize;
+	/* Align the region. First, the base... */
+	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
+	vaddr &= PAGE_FRAME;
+
+	/* ...and now the length. */
+	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
+
+	npages = memsize / PAGE_SIZE;
+
+	/* We don't use these - all pages are read-write */
 	(void)readable;
 	(void)writeable;
 	(void)executable;
+
+	if (as->segs.as_vbase1 == 0) {
+		as->segs.as_vbase1 = vaddr;
+		as->segs.as_npages1 = npages;
+		as->segs.text_ph = ph;
+		return 0;
+	}
+
+	if (as->segs.as_vbase2 == 0) {
+		as->segs.as_vbase2 = vaddr;
+		as->segs.as_npages2 = npages;
+		as->segs.data_ph = ph;
+		return 0;
+	}
+
+	/*
+	 * Support for more than two regions is not available.
+	 */
+	kprintf("dumbvm: Warning: too many regions\n");
 	return ENOSYS;
 }
 
+/* Saves the program's elf path */
+int as_set_progname(char *progname) {
+	struct addrspace *as;
 
+	as = proc_getas();
+	as->segs.progname = kstrdup(progname);
 
-/* SHOULD NOT BE NEEDED */
+	return 0;
+}
 
-
+/* Imported from dumbvm, should check if it works fine */
+static
+void
+as_zero_region(paddr_t paddr, unsigned npages)
+{
+	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+}
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
+	as->segs.as_stackvbase = USERSTACK;
+	as->segs.as_stackvtop = USERSTACK + PAGING_STACKPAGES * PAGE_SIZE;
 
 	/* Initial user-level stack pointer */
-	*stackptr = USERSTACK;
-
-	/* */
+	*stackptr = as->segs.as_stackvbase;
 
 	return 0;
 }
+
+/* SHOULD NOT BE NEEDED */
 
 int
 as_prepare_load(struct addrspace *as)

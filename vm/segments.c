@@ -19,6 +19,10 @@ load_from_elf(paddr_t *paddr, struct addrspace *as, off_t offset){
 	
     struct iovec iov;
     struct uio ku;
+    /* 
+     * Giulio: potrebbe essere necessario aggiungere eh.e_phentsize 1 volta se carico da text seg
+     * o 2 volte se carico da data seg, come viene fatto nella load_elf nel for di set up dell'addrspace 
+     */
     off_t offset = as->segs.eh.e_phoff + offset; // Offset in the ELF file of the page we want to read
     uio_kinit(&iov, &ku, &as->segs.ph, sizeof(as->segs.ph), offset, UIO_READ);
 

@@ -4,6 +4,10 @@
 #include <opt-paging.h>
 
 struct segments {
+    char *progname;
+    Elf_Ehdr eh;
+    Elf_Phdr text_ph;
+    Elf_Phdr data_ph;
     vaddr_t as_vbase1;
     size_t as_npages1;
     vaddr_t as_vbase2;
@@ -11,8 +15,6 @@ struct segments {
     vaddr_t as_stackvbase;
     vaddr_t as_stackvtop;
     vaddr_t as_stackptbase;
-    Elf_Ehdr eh;
-    Elf_Phdr ph;
 };
 
 int

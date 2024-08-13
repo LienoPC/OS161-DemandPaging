@@ -44,6 +44,12 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <opt-paging.h>
+
+#if OPT_PAGING
+#include <segments.h>
+#include <elf.h>
+#endif
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -74,6 +80,14 @@ runprogram(char *progname)
 		vfs_close(v);
 		return ENOMEM;
 	}
+
+	#if OPT_PAGING
+	result = as_set_progname(progname);
+	if(result) {
+		vfs_close(v);
+		return result;
+	}
+	#endif
 
 	/* Switch to it and activate it. */
 	proc_setas(as);

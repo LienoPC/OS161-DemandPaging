@@ -59,6 +59,11 @@
 #include <addrspace.h>
 #include <vnode.h>
 #include <elf.h>
+#include <opt-paging.h>
+
+#if OPT_PAGING
+#include <segments.h>
+#endif
 
 /*
  * Load a segment at virtual address VADDR. The segment in memory
@@ -202,6 +207,10 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		return ENOEXEC;
 	}
 
+	#if OPT_PAGING
+	as->segs.eh = eh;
+	#endif
+
 	/*
 	 * Go through the list of segments and set up the address space.
 	 *
@@ -232,7 +241,6 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
-/* AGGIUNGERE QUA IL CODICE PER SETUPPARE L'ADDRSPACE: SALVARE IL PH DEI SEGMENTI E L'EH DEL FILE COMPLESSIVO, DATO CHE CI SERVE L'OSFET*/
 		switch (ph.p_type) {
 		    case PT_NULL: /* skip */ continue;
 		    case PT_PHDR: /* skip */ continue;
@@ -244,15 +252,26 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
+		#if OPT_PAGING
+		result = as_define_region(as,
+					  ph.p_vaddr, ph.p_memsz, ph,
+					  ph.p_flags & PF_R,
+					  ph.p_flags & PF_W,
+					  ph.p_flags & PF_X);
+		#else
 		result = as_define_region(as,
 					  ph.p_vaddr, ph.p_memsz,
 					  ph.p_flags & PF_R,
 					  ph.p_flags & PF_W,
 					  ph.p_flags & PF_X);
+		#endif
+
 		if (result) {
 			return result;
 		}
 	}
+
+	#if !OPT_PAGING
 
 	result = as_prepare_load(as);
 	if (result) {
@@ -302,7 +321,8 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		return result;
 	}
 
-	*entrypoint = eh.e_entry;
+	#endif
 
+	*entrypoint = eh.e_entry;
 	return 0;
 }

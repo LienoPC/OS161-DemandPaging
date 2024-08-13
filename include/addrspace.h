@@ -41,7 +41,7 @@
 
 //#include <types.h>
 #include <vm.h>
-#include "opt-dumbvm.h"
+#include <opt-paging.h>
 
 struct vnode;
 
@@ -54,7 +54,7 @@ struct vnode;
  */
 
 struct addrspace {
-#if OPT_DUMBVM
+#if !OPT_PAGING
         vaddr_t as_vbase1;
         paddr_t as_pbase1;
         size_t as_npages1;
@@ -62,7 +62,7 @@ struct addrspace {
         paddr_t as_pbase2;
         size_t as_npages2;
         paddr_t as_stackpbase;
-#elif OPT_PAGING
+#else
         /* Page Table */
         paddr_t *frames;
         unsigned char     *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
@@ -120,12 +120,23 @@ int               as_copy(struct addrspace *src, struct addrspace **ret);
 void              as_activate(void);
 void              as_deactivate(void);
 void              as_destroy(struct addrspace *);
+#if OPT_PAGING
+int               as_define_region(struct addrspace *as,
+                                   vaddr_t vaddr, size_t sz,
+                                   Elf_Phdr ph,
+                                   int readable,
+                                   int writeable,
+                                   int executable); 
 
+int               as_set_progname(char *progname);       
+#else
 int               as_define_region(struct addrspace *as,
                                    vaddr_t vaddr, size_t sz,
                                    int readable,
                                    int writeable,
                                    int executable);
+#endif
+
 int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
