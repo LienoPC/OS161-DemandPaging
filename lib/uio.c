@@ -154,7 +154,7 @@ uio_kinit(struct iovec *iov, struct uio *u,
 {
 	iov->iov_kbase = kbuf;
 	iov->iov_len = len;
-	u->uio_iov = iov;
+	u->uio_iov = iov; 
 	u->uio_iovcnt = 1;
 	u->uio_offset = pos;
 	u->uio_resid = len;

@@ -37,7 +37,7 @@
 #define PT_REFERENCE_BIT 0x1
 #define PT_DIRTY_BIT 0x2
 #define PT_VALID_BIT 0x4
-
+#define PT_SWAP_BIT 0x8
 
 //#include <types.h>
 #include <vm.h>
@@ -65,14 +65,14 @@ struct addrspace {
 #elif OPT_PAGING
         /* Page Table */
         paddr_t *frames;
-        unsigned char     *control_bits; // VDR: V - valid bit, D - dirty bit, R - reference bit
+        unsigned char     *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
         int n_entry;
         struct segments segs; // Elf header segments
 #endif
 };
 
 /*
- * Functions in addrspace.c:
+ * Functions in pt.c:
  *
  *    as_create - create a new empty address space. You need to make
  *                sure this gets called in all the right places. You
@@ -107,9 +107,12 @@ struct addrspace {
  *    as_define_stack - set up the stack region in the address space.
  *                (Normally called *after* as_complete_load().) Hands
  *                back the initial stack pointer for the new process.
- *
- * Note that when using dumbvm, addrspace.c is not used and these
- * functions are found in dumbvm.c.
+ * 
+ * 
+ *    pt_getframe - resolves a logical page into the associate physical frame
+ *     
+ * 
+ *    pt_pagefault - resolves a page fault
  */
 
 struct addrspace *as_create(void);
@@ -127,6 +130,8 @@ int               as_prepare_load(struct addrspace *as);
 int               as_complete_load(struct addrspace *as);
 int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
 
+paddr_t                 pt_getframe(vaddr_t addr);
+paddr_t                 pt_pagefault(vaddr_t addr);
 
 /*
  * Functions in loadelf.c
@@ -136,6 +141,7 @@ int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
  */
 
 int load_elf(struct vnode *v, vaddr_t *entrypoint);
+
 
 
 #endif /* _ADDRSPACE_H_ */

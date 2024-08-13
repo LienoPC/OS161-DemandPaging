@@ -63,7 +63,7 @@
  *  - 0: original dumbvm
  *  - 1: support for alloc/free
  */
-#define DUMBVM_WITH_FREE 1
+#define DUMBVM_WITH_FREE 0
 
 /*
  * Wrap ram_stealmem in a spinlock.

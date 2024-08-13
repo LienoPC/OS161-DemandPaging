@@ -10,6 +10,13 @@ struct segments {
     size_t as_npages2;
     vaddr_t as_stackvbase;
     vaddr_t as_stackvtop;
+    vaddr_t as_stackptbase;
+    Elf_Ehdr eh;
+    Elf_Phdr ph;
 };
+
+int
+load_from_elf(paddr_t *paddr,struct addrspace *as, off_t offset);
+
 
 #endif
