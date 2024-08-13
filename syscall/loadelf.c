@@ -232,6 +232,7 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 			return ENOEXEC;
 		}
 
+/* AGGIUNGERE QUA IL CODICE PER SETUPPARE L'ADDRSPACE: SALVARE IL PH DEI SEGMENTI E L'EH DEL FILE COMPLESSIVO, DATO CHE CI SERVE L'OSFET*/
 		switch (ph.p_type) {
 		    case PT_NULL: /* skip */ continue;
 		    case PT_PHDR: /* skip */ continue;

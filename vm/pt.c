@@ -220,6 +220,79 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	return 0;
 }
 
+
+/*
+	ACCESS THE PAGE TABLE
+*/
+
+
+/* Tries to get a frame for a logical page */
+
+paddr_t
+pt_getframe(vaddr_t addr){
+	paddr_t paddr;
+	int i;
+	struct addrspace *as;
+	as = proc_getas();
+
+	if(addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop){
+		/* Stack address, has to be mapped down */
+		addr = as->segs.as_stackptbase + (as->segs.as_stackvtop - addr);
+	}
+	KASSERT((addr & PAGE_FRAME) == addr);
+	/* Get the index of the PT */
+	i = addr/PAGE_SIZE;
+	/* Verify if the entry is valid */
+	if (as->control_bits[i] & PT_VALID_BIT){
+		/* Return the physical frame */
+		paddr = as->frames[i];
+	}else{
+		/* PAGE FAULT: frame not in memory */
+		paddr = pt_pagefault(addr);
+	}
+	
+
+}
+
+/* 
+	Manages a page fault 
+
+	Tries to take a frame from memory and reads from the elf/swap file basing
+	on the swap bit of the entry
+*/
+
+paddr_t
+pt_pagefault(vaddr_t addr){
+	paddr_t paddr;
+	int index;
+	off_t offset;
+
+	struct addrspace *as;
+	as = proc_getas();
+	index = addr/PAGE_SIZE;
+	if (as->control_bits[index] & PT_SWAP_BIT){
+		/* Compute virtual page address offset */
+		if (addr >= as->segs.as_vbase1 && addr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages2)) {
+			offset = addr - as->segs.as_vbase1;
+			KASSERT((offset & PAGE_FRAME) == offset);
+		}
+		else if (addr >= as->segs.as_vbase2 && addr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
+			offset = (addr - as->segs.as_vbase2) + as->segs.eh.e_phentsize;
+			KASSERT((offset & PAGE_FRAME) == offset);
+		}
+		else if (addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop) {
+			/* PROBLEMI: lo stack è solo nello swapfile */
+		}
+		
+		if (load_from_elf(&paddr, as, offset)){
+			/* PROBLEMI */
+		}
+
+	}else{
+		/* Read the page from the elf file */
+	}
+}
+
 /*
 	CREATE THE PAGE TABLE AND SEGMENTS STRUCT OF A PROCESS
 */
@@ -353,6 +426,12 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	return ENOSYS;
 }
 
+
+
+/* SHOULD NOT BE NEEDED */
+
+
+
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
@@ -365,10 +444,10 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	/* Initial user-level stack pointer */
 	*stackptr = USERSTACK;
 
+	/* */
+
 	return 0;
 }
-
-/* SHOULD NOT BE NEEDED */
 
 int
 as_prepare_load(struct addrspace *as)
