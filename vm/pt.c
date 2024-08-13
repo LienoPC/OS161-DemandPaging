@@ -139,7 +139,7 @@ vm_tlbshootdown(const struct tlbshootdown *ts)
 int
 vm_fault(int faulttype, vaddr_t faultaddress)
 { 
-	vaddr_t vbase1, vtop1;
+	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
 	paddr_t paddr;
 	struct addrspace *as;
 	bool readonly;
@@ -194,13 +194,26 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	vbase1 = as->segs.as_vbase1;
 	vtop1 = vbase1 + as->segs.as_npages1 * PAGE_SIZE;
+	vbase2 = as->segs.as_vbase2;
+	vtop2 = vbase2 + as->segs.as_npages2 * PAGE_SIZE;
+	stackbase = as->segs.as_stackvbase;
+	stacktop = as->segs.as_stackvtop;
 	
-	/* 
-	 * Check if faultaddress belongs to the program's text segment.
-	 * If so, the new TLB entry will have the dirty bit cleared
-	*/
 	if (faultaddress >= vbase1 && faultaddress < vtop1) {
+		/* 
+		 * Check if faultaddress belongs to the program's text segment.
+		 * If so, the new TLB entry will have the dirty bit cleared
+		 */
 		readonly = true;
+	}
+	else if ((faultaddress >= vbase2 && faultaddress < vtop2) ||
+			 (faultaddress >= stackbase && faultaddress < stacktop)) {
+		readonly = false;
+	}
+	else {
+		/* fauladdress is not a virtual address in the current process's address space */
+		DEBUG(DB_VM, "faultaddress not in curproc as\n");
+		return EFAULT;
 	}
 
 	/* 
