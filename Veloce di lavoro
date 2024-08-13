@@ -23,6 +23,10 @@ DEMAND PAGING
 •	Aggiornare la TLB
 •	Ritornare dall’exception e far ripartire il processo utente con un nuovo accesso alla TLB
 •	CARICAMENTO DEI SEGMENT DAL FILE ELF IN SWAPFILE: modifica della load_elf in modo da mappare ogni segmento allo spazio di indirizzamento corretto in page table (primo giro nella load_elf, quando si leggono solo gli header) e nel secondo giro della load elf si copiano i segmenti nello swapfile (qui forse serve una struttura logica per mantenere i riferimenti/posizioni nello swapfile)
+    
+• GESTIONE DEL CARICAMENTO DI UNA PAGINA IN RAM 
+    • Non dovremmo avere problemi per quanto riguarda la dimensione dei dati da leggere dall'elf, impostando una filesize == memsize == PAGE_FRAME (o una filesize < memsize in caso la fine del segmento non fosse allineato a pagina) dovrebbe avere il comportamento atteso e corretto
+    • Sarà necessario vedere i dettagli interni della VOP_READ che legge in memoria utente, a cui nella versione dumbvm viene passato lo spazio di indirizzamento contiguo da cui viene prelevato l'indirizzo fisico pbase per effettuare la scrittura.    
 
 1. Definizione delle tre strutture base
 Free frame management nel coremap.h, addrspace modificato in addrspace.h (che dovrebbe contenere anche la page table e in generale il mapping tra segments (vmemory) e memoria fisica), mantenimento delle informazioni estratte dal file elf riguardo ai segments in segments.h.
