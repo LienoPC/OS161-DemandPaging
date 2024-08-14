@@ -9,6 +9,6 @@ pt.o: ../../vm/pt.c ../../include/types.h ../../include/kern/types.h \
  ../../include/thread.h ../../include/array.h \
  includelinks/machine/thread.h ../../include/setjmp.h \
  includelinks/kern/machine/setjmp.h includelinks/mips/tlb.h \
- ../../include/segments.h opt-paging.h ../../include/addrspace.h \
- ../../include/vm.h opt-dumbvm.h ../../include/vm_tlb.h \
- ../../include/pt.h ../../include/coremap.h
+ ../../include/elf.h includelinks/machine/elf.h ../../include/segments.h \
+ opt-paging.h ../../include/addrspace.h ../../include/vm.h \
+ ../../include/vm_tlb.h ../../include/pt.h ../../include/coremap.h

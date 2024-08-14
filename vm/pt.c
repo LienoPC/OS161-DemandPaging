@@ -141,7 +141,7 @@ int
 vm_fault(int faulttype, vaddr_t faultaddress)
 { 
 	vaddr_t vbase1, vtop1, vbase2, vtop2, stackbase, stacktop;
-	paddr_t paddr;
+	paddr_t paddr = (paddr_t)NULL;
 	struct addrspace *as;
 	bool readonly;
 
@@ -246,9 +246,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 paddr_t
 pt_getframe(vaddr_t addr){
-	paddr_t paddr;
+	paddr_t paddr = (paddr_t)NULL;
 	int i;
 	struct addrspace *as;
+	(void) paddr;
 	as = proc_getas();
 
 	if(addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop){
@@ -266,7 +267,7 @@ pt_getframe(vaddr_t addr){
 		/* PAGE FAULT: frame not in memory */
 		paddr = pt_pagefault(addr);
 	}
-	
+	return paddr;
 
 }
 
@@ -279,9 +280,9 @@ pt_getframe(vaddr_t addr){
 
 paddr_t
 pt_pagefault(vaddr_t addr){
-	paddr_t paddr;
+	paddr_t paddr = (paddr_t)NULL;
 	int index;
-	off_t offset;
+	off_t offset = (off_t) 0;
 
 	struct addrspace *as;
 	as = proc_getas();
@@ -299,16 +300,22 @@ pt_pagefault(vaddr_t addr){
 		else if (addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop) {
 			/* PROBLEMI: lo stack è solo nello swapfile */
 			/* Ma se abbiamo page fault su un suo indirizzo logico non carichiamo un frame
-			come per gli altri segmenti? (Giulio) */
+			come per gli altri segmenti? (Giulio)
+			M, lo carichiamo però dallo swap file (Bho)
+			 */
 		}
-		
+		/*
 		if (load_from_elf(&paddr, as, offset)){
-			/* PROBLEMI */
+			
 		}
+		*/
+		
 
 	}else{
 		/* Read the page from the elf file */
 	}
+
+	return paddr;
 }
 
 /*
@@ -479,12 +486,15 @@ int as_set_progname(char *progname) {
 }
 
 /* Imported from dumbvm, should check if it works fine */
+/*
 static
 void
 as_zero_region(paddr_t paddr, unsigned npages)
 {
 	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
 }
+
+*/
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)

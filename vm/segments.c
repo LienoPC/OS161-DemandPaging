@@ -13,39 +13,47 @@
     Given the offset of the segment, sums the offset of the virtual page we want to gather and reads PAGE_SIZE
 */
 
+
 /* AGGIUNGERE IL VNODE */
+
+
+/* 
+     * Giulio: potrebbe essere necessario aggiungere eh.e_phentsize 1 volta se carico da text seg
+     * o 2 volte se carico da data seg, come viene fatto nella load_elf nel for di set up dell'addrspace -> lo faccio nella funzione chiamante
+     */
+
+ /*
+     * Giulio: importante considerare una &u e non una &ku (se non sbaglio) per il caricamento della pagina, dal
+     * momento che viene caricata in un buffer user e non kernel (come la load_segment in loadelf.c). Questo distingue
+     * il comportamento per considerare il campo uio_space dove dovremmo caricare l'addrspace user
+     */
+/*
+
 int
 load_from_elf(paddr_t *paddr, struct addrspace *as, off_t offset){
 	
     struct iovec iov;
     struct uio ku;
-    /* 
-     * Giulio: potrebbe essere necessario aggiungere eh.e_phentsize 1 volta se carico da text seg
-     * o 2 volte se carico da data seg, come viene fatto nella load_elf nel for di set up dell'addrspace 
-     */
+    
     off_t offset = as->segs.eh.e_phoff + offset; // Offset in the ELF file of the page we want to read
     uio_kinit(&iov, &ku, &as->segs.ph, sizeof(as->segs.ph), offset, UIO_READ);
 
-    /*
-     * Giulio: importante considerare una &u e non una &ku (se non sbaglio) per il caricamento della pagina, dal
-     * momento che viene caricata in un buffer user e non kernel (come la load_segment in loadelf.c). Questo distingue
-     * il comportamento per considerare il campo uio_space dove dovremmo caricare l'addrspace user
-     */
+   
     result = VOP_READ(v, &ku);
     if (result) {
         return result;
     }
 
     if (ku.uio_resid != 0) {
-        /* short read; problem with executable? */
+        // short read; problem with executable?
         kprintf("ELF: short read on phdr - file truncated?\n");
         return ENOEXEC;
     }
 
     switch (ph.p_type) {
-        case PT_NULL: /* skip */ continue;
-        case PT_PHDR: /* skip */ continue;
-        case PT_MIPS_REGINFO: /* skip */ continue;
+        case PT_NULL: // continue;
+        case PT_PHDR: // continue;
+        case PT_MIPS_REGINFO: // continue;
         case PT_LOAD: break;
         default:
         kprintf("loadelf: unknown segment type %d\n",
@@ -60,3 +68,6 @@ load_from_elf(paddr_t *paddr, struct addrspace *as, off_t offset){
         return result;
     }
 }
+
+
+*/

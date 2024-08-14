@@ -36,22 +36,30 @@ coremap_bootstrap(void){
     int bootstrap_pages = 0;
     int i;
     /* Alloc coremap struct */
+    kprintf("Allocazione bootstrap");
+
     coremap = kmalloc(sizeof(*coremap));
     if (coremap == NULL){
         /*problemi nell'allocazione del bootstrap*/
+        kprintf("Problemi allocazione bootstrap");
     }
     coremap->nRamFrames = ((int)ram_getsize())/PAGE_SIZE;
-    if (&coremap->nRamFrames == NULL){
-         /*problemi nell'allocazione del bootstrap*/
-    }
     coremap->bitmap = kmalloc(sizeof(unsigned char) * coremap->nRamFrames);
     if (coremap->bitmap == NULL){
          /*problemi nell'allocazione del bootstrap*/
+        kprintf("Problemi allocazione bitmap");
+
     }
     coremap->allocSize = kmalloc(sizeof(int) *  coremap->nRamFrames);
+    kprintf("AllocSize: %p", coremap->allocSize);
+    if (coremap->allocSize == NULL){
+         /*problemi nell'allocazione del bootstrap*/
+        kprintf("Problemi allocazione allocSize");
+
+    }
     for(i = 0; i < coremap->nRamFrames; i++){
         coremap->bitmap[i] = 1;
-        coremap->allocSize = 0;
+        coremap->allocSize[i] = 0;
     }
     /* Calculate the number of pages used by the coremap and occupied using ram_stealmem*/
     bootstrap_pages = ram_getfirstfreeaddr()/PAGE_SIZE;
