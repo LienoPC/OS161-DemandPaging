@@ -40,6 +40,8 @@ Bisogna aggiungere un metodo aggiuntivo nella kmalloc per usare la ram_stealmem 
 Per la page table si è scelti un vettore di p_addr a cui è associato un vettore di unsigned char corrispondenti ai bit (Valid, Dirty e Reference). Bisogna aggiungere un meccanismo
 di traduzione per le pagine dello stack, che verrebbero normalmente mappate su indirizzi alti dello spazio logico, lasciando un gap di pagine inutilizzate nel vettore della page table.
 
+PROBLEMA: se l'header segment non è allineato a pagina allora l'accesso ad indirizzi virtuali (sulle pagine caricate in memoria, considerato il fatto che il vspace è allargato per allinearlo a pagina), è sbagliato
+
 PAGE REPLACEMENT
 •	Creazione dello swapfile, scrittura/lettura di pagine sullo swapfile
 •	Algoritmo di sostituzione delle pagine
