@@ -36,13 +36,17 @@
 #include <proc.h>
 #include <current.h>
 #include <mips/tlb.h>
+/*
 #include <elf.h>
+#include <vnode.h>
 #include <segments.h>
+*/
 #include <addrspace.h>
 #include <vm_tlb.h>
 #include <vm.h>
 #include <pt.h>
 #include <coremap.h>
+#include <kern/fcntl.h>
 
 
 
@@ -229,6 +233,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		tlb_load(pt_loadpage(faultaddress))
 	*/
 
+	paddr = pt_getframe(faultaddress);
+
 	/* make sure paddr is page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
@@ -283,9 +289,12 @@ pt_pagefault(vaddr_t addr){
 	paddr_t paddr = (paddr_t)NULL;
 	int index;
 	off_t offset = (off_t) 0;
-
 	struct addrspace *as;
 	as = proc_getas();
+
+	/* Per prima cosa: controllare se c'è memoria libera per allocare 1 frame, 
+	 * altrimenti page replacement */
+	
 	index = addr/PAGE_SIZE;
 	if (as->control_bits[index] & PT_SWAP_BIT){
 		/* Compute virtual page address offset */
@@ -481,6 +490,23 @@ int as_set_progname(char *progname) {
 
 	as = proc_getas();
 	as->segs.progname = kstrdup(progname);
+
+	return 0;
+}
+
+/* Save the swapfile's vnode into the addspace */
+int as_set_swapfile(char* path) {
+	int result;
+	struct vnode sf;
+	struct addrspace *as;
+
+	as = proc_getas();
+	result = vfs_open(path, O_RDWR, 0, &sf);
+	if (result) {
+		return result;
+	}
+
+	as->swapfile = sf;
 
 	return 0;
 }

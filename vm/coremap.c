@@ -145,6 +145,8 @@ paddr_t getcontinuousalloc(int npages){
 */
 
 paddr_t stealcontinuousalloc(int npages, paddr_t first){
+
+    /* Serve aggiungere swap out su SWAPFILE? */
     
     int i;
     int f_first;

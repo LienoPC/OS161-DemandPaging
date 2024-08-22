@@ -43,6 +43,12 @@
 #include <vm.h>
 #include <opt-paging.h>
 
+#if OPT_PAGING
+#include <vnode.h>
+#include <elf.h>
+#include <segments.h>
+#endif
+
 struct vnode;
 
 
@@ -65,9 +71,10 @@ struct addrspace {
 #else
         /* Page Table */
         paddr_t *frames;
-        unsigned char     *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
+        unsigned char *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
         int n_entry;
-        struct segments segs; // Elf header segments
+        struct vnode swapfile; // Swapfile vnode 
+        struct segments segs;  // Elf header segments
 #endif
 };
 
@@ -128,7 +135,8 @@ int               as_define_region(struct addrspace *as,
                                    int writeable,
                                    int executable); 
 
-int               as_set_progname(char *progname);       
+int               as_set_progname(char *progname);
+int               as_set_swapfile(char *path);       
 #else
 int               as_define_region(struct addrspace *as,
                                    vaddr_t vaddr, size_t sz,

@@ -87,6 +87,12 @@ runprogram(char *progname)
 		vfs_close(v);
 		return result;
 	}
+
+	result = as_set_swapfile("SWAPFILE");
+	if(result) {
+		vfs_close(v);
+		return result;
+	}
 	#endif
 
 	/* Switch to it and activate it. */
