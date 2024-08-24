@@ -402,8 +402,9 @@ as_destroy(struct addrspace *as)
 	*/
 	kfree(as->frames);
 	kfree(as->control_bits);
-	/* TODO: aggiungere distruzione dello swapfile */
 
+	vfs_close(as->swapfile);
+	vfs_close(as->segs.progelf);
 
 	kfree(as);
 }
@@ -484,17 +485,19 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	return ENOSYS;
 }
 
-/* Saves the program's elf path */
-int as_set_progname(char *progname) {
+/* Saves the program's elf vnode into the addrspace */
+void as_set_progelf(struct vnode* elf) {
 	struct addrspace *as;
 
 	as = proc_getas();
-	as->segs.progname = kstrdup(progname);
 
-	return 0;
+	/* Increase the refcount of elf's vnode, see runprogram for more details on this */
+	VOP_INCREF(elf);
+
+	as->segs.progelf = elf;
 }
 
-/* Save the swapfile's vnode into the addspace */
+/* Saves the swapfile's vnode into the addrspace */
 int as_set_swapfile(char* path) {
 	int result;
 	struct vnode *sf;

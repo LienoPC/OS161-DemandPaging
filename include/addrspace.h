@@ -135,8 +135,8 @@ int               as_define_region(struct addrspace *as,
                                    int writeable,
                                    int executable); 
 
-int               as_set_progname(char *progname);
-int               as_set_swapfile(char *path);       
+void               as_set_progelf (struct vnode *elf);
+int                as_set_swapfile(char *path);       
 #else
 int               as_define_region(struct addrspace *as,
                                    vaddr_t vaddr, size_t sz,

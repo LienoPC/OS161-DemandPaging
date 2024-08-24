@@ -82,11 +82,7 @@ runprogram(char *progname)
 	}
 
 	#if OPT_PAGING
-	result = as_set_progname(progname);
-	if(result) {
-		vfs_close(v);
-		return result;
-	}
+	as_set_progelf(v);
 
 	result = as_set_swapfile((char *) "SWAPFILE");
 	if(result) {
@@ -108,6 +104,13 @@ runprogram(char *progname)
 	}
 
 	/* Done with the file now. */
+	/* 
+	 * This has to be done in the PAGING config as well, as the
+	 * file will not be closed until the vnode refcount equals 0.
+	 * Currently, the refcount is 2, since as_set_progelf increases it by 1.
+	 * In as_destroy, vfs_close will be called again on as->segs.progelf,
+	 * dropping the refcount to 0, effectively closing the file. 
+	 */
 	vfs_close(v);
 
 	/* Define the user stack in the address space */

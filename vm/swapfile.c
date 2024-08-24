@@ -120,6 +120,6 @@ void sf_pageout(vaddr_t vaddr, paddr_t paddr) {
     }
     uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) (filesz + sizeof(vaddr)), UIO_WRITE);
     if(VOP_WRITE(as->swapfile, &data_ku)) {
-        panic("Error during the first VOP_WRITE in sf_pageout");
+        panic("Error during the second VOP_WRITE in sf_pageout");
     }
 }
