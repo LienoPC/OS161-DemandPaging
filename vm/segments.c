@@ -27,24 +27,24 @@
      * momento che viene caricata in un buffer user e non kernel (come la load_segment in loadelf.c). Questo distingue
      * il comportamento per considerare il campo uio_space dove dovremmo caricare l'addrspace user
      */
-/*
+
 
 int
 load_from_elf(paddr_t *paddr, struct addrspace *as, off_t offset){
 	
     struct iovec iov;
-    struct uio ku;
+    struct uio frame_ku;
     
     off_t offset = as->segs.eh.e_phoff + offset; // Offset in the ELF file of the page we want to read
-    uio_kinit(&iov, &ku, &as->segs.ph, sizeof(as->segs.ph), offset, UIO_READ);
+    uio_kinit(&iov, &frame_ku, &as->segs.ph, sizeof(as->segs.ph), offset, UIO_READ);
 
    
-    result = VOP_READ(v, &ku);
+    result = VOP_READ(v, &frame_ku);
     if (result) {
         return result;
     }
 
-    if (ku.uio_resid != 0) {
+    if (frame_ku.uio_resid != 0) {
         // short read; problem with executable?
         kprintf("ELF: short read on phdr - file truncated?\n");
         return ENOEXEC;

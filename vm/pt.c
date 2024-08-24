@@ -297,6 +297,17 @@ pt_pagefault(vaddr_t addr){
 	
 	index = addr/PAGE_SIZE;
 	if (as->control_bits[index] & PT_SWAP_BIT){
+		
+		/*
+		if (load_from_elf(&paddr, as, offset)){
+			
+		}
+		*/
+		
+
+	}else{
+		/* Read the page from the elf file */
+
 		/* Compute virtual page address offset */
 		if (addr >= as->segs.as_vbase1 && addr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
 			offset = addr - as->segs.as_vbase1;
@@ -313,15 +324,6 @@ pt_pagefault(vaddr_t addr){
 			M, lo carichiamo però dallo swap file (Bho)
 			 */
 		}
-		/*
-		if (load_from_elf(&paddr, as, offset)){
-			
-		}
-		*/
-		
-
-	}else{
-		/* Read the page from the elf file */
 	}
 
 	return paddr;
