@@ -4,7 +4,7 @@
 #include <opt-paging.h>
 
 struct segments {
-    char *progname;
+    struct vnode *progelf;
     Elf_Ehdr eh;
     Elf_Phdr text_ph;
     Elf_Phdr data_ph;
@@ -17,8 +17,7 @@ struct segments {
     vaddr_t as_stackptbase;
 };
 
-int
-load_from_elf(paddr_t *paddr,struct addrspace *as, off_t offset);
-
+/* int
+load_from_elf(paddr_t *paddr, struct addrspace *as, off_t offset); */
 
 #endif

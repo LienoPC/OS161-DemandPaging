@@ -36,7 +36,7 @@ off_t sf_getsize(void) {
     struct stat stats;
 
     as = proc_getas();
-    if (VOP_STAT(&as->swapfile, &stats)) {
+    if (VOP_STAT(as->swapfile, &stats)) {
         panic("Error during VOP_STAT in sf_getsize");
     }
     return stats.st_size;
@@ -73,7 +73,7 @@ int sf_pagein(vaddr_t vaddr, paddr_t paddr) {
     uio_kinit(&header_iov, &header_ku, &header, sizeof(header), 0, UIO_READ);
 
     while (header_ku.uio_offset < filesz) {
-        if (VOP_READ(&as->swapfile, &header_ku)) {
+        if (VOP_READ(as->swapfile, &header_ku)) {
             panic("Error during the first VOP_READ in sf_pagein");
         }
 
@@ -90,7 +90,7 @@ int sf_pagein(vaddr_t vaddr, paddr_t paddr) {
     }
 
     uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, header_ku.uio_offset + sizeof(header), UIO_READ);
-    if (VOP_READ(&as->swapfile, &data_ku)) {
+    if (VOP_READ(as->swapfile, &data_ku)) {
         panic("Error during the second VOP_READ in sf_pagein");
     }
 
@@ -115,11 +115,11 @@ void sf_pageout(vaddr_t vaddr, paddr_t paddr) {
 
     /* Currently doing I/O using kernel space */
     uio_kinit(&header_iov, &header_ku, &vaddr, sizeof(vaddr), filesz, UIO_WRITE);
-    if(VOP_WRITE(&as->swapfile, &header_ku)) {
+    if(VOP_WRITE(as->swapfile, &header_ku)) {
         panic("Error during the first VOP_WRITE in sf_pageout");
     }
     uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) (filesz + sizeof(vaddr)), UIO_WRITE);
-    if(VOP_WRITE(&as->swapfile, &data_ku)) {
-        panic("Error during the first VOP_WRITE in sf_pageout");
+    if(VOP_WRITE(as->swapfile, &data_ku)) {
+        panic("Error during the second VOP_WRITE in sf_pageout");
     }
 }
