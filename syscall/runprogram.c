@@ -88,7 +88,7 @@ runprogram(char *progname)
 		return result;
 	}
 
-	result = as_set_swapfile("SWAPFILE");
+	result = as_set_swapfile((char *) "SWAPFILE");
 	if(result) {
 		vfs_close(v);
 		return result;

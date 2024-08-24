@@ -8,6 +8,6 @@ segments.o: ../../vm/segments.c ../../include/types.h \
  ../../include/thread.h ../../include/array.h ../../include/threadlist.h \
  includelinks/machine/thread.h ../../include/setjmp.h \
  includelinks/kern/machine/setjmp.h ../../include/vnode.h \
- ../../include/elf.h includelinks/machine/elf.h ../../include/segments.h \
- opt-paging.h ../../include/addrspace.h ../../include/vm.h \
- includelinks/machine/vm.h
+ ../../include/elf.h includelinks/machine/elf.h ../../include/addrspace.h \
+ ../../include/vm.h includelinks/machine/vm.h opt-paging.h \
+ ../../include/segments.h

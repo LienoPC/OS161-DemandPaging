@@ -5,8 +5,8 @@
 #include <current.h>
 #include <vnode.h>
 #include <elf.h>
-#include <segments.h>
 #include <addrspace.h>
+#include <segments.h>
 
 /*
     Loads a page from the elf file, usign the elf header and the program header of the segment stored in the addrspace structure

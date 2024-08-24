@@ -44,10 +44,10 @@
 #include <addrspace.h>
 #include <vm_tlb.h>
 #include <vm.h>
+#include <vfs.h>
 #include <pt.h>
 #include <coremap.h>
 #include <kern/fcntl.h>
-
 
 
 /* under dumbvm, always have 72k of user stack */
@@ -497,11 +497,12 @@ int as_set_progname(char *progname) {
 /* Save the swapfile's vnode into the addspace */
 int as_set_swapfile(char* path) {
 	int result;
-	struct vnode sf;
+	struct vnode *sf;
 	struct addrspace *as;
 
 	as = proc_getas();
-	result = vfs_open(path, O_RDWR, 0, &sf);
+
+	result = vfs_open(path, O_RDWR | O_TRUNC | O_CREAT, 0, &sf);
 	if (result) {
 		return result;
 	}
