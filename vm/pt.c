@@ -100,6 +100,7 @@ alloc_kpages(unsigned npages)
 {
 	(void) npages;
 	paddr_t pa;
+	struct addrspace *as;
 	vm_can_sleep();
 	if (isCoremapActive()) {
 		/* Use standard paging methods */
@@ -107,6 +108,7 @@ alloc_kpages(unsigned npages)
 		if (pa == (paddr_t) NULL){
 			/* Could not find enough continuous pages, we should steal user pages  */
 			/* TODO */
+			as = proc_getas();
 			
 		}
 
@@ -242,11 +244,9 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	return 0;
 }
 
-
 /*
 	ACCESS THE PAGE TABLE
 */
-
 
 /* Tries to get a frame for a logical page */
 
@@ -264,7 +264,7 @@ pt_getframe(vaddr_t addr){
 	}
 	KASSERT((addr & PAGE_FRAME) == addr);
 	/* Get the index of the PT */
-	i = addr/PAGE_SIZE;
+	i = get_pt_index(as, addr);
 	/* Verify if the entry is valid */
 	if (as->control_bits[i] & PT_VALID_BIT){
 		/* Return the physical frame */
@@ -272,6 +272,11 @@ pt_getframe(vaddr_t addr){
 	}else{
 		/* PAGE FAULT: frame not in memory */
 		paddr = pt_pagefault(addr);
+		/* update the PT */
+		as->frames[i] = paddr;
+		/* now the pt entry is valid */ 
+		as->control_bits[i] |= PT_VALID_BIT;
+
 	}
 	return paddr;
 
@@ -292,41 +297,54 @@ pt_pagefault(vaddr_t addr){
 	struct addrspace *as;
 	as = proc_getas();
 
-	/* Per prima cosa: controllare se c'è memoria libera per allocare 1 frame, 
-	 * altrimenti page replacement */
-	
-	index = addr/PAGE_SIZE;
-	if (as->control_bits[index] & PT_SWAP_BIT){
-		
-		/*
-		if (load_from_elf(&paddr, as, offset)){
-			
-		}
-		*/
-		
-
+	/* First get the physical frame and then start the page replacement if there are no available frames */
+	paddr = getfreeframe();
+	/* Zeroing the frame */
+	as_zero_region(paddr,1);
+	if (paddr == (paddr_t) NULL){
+		/* Page Replacement */
 	}else{
-		/* Read the page from the elf file */
-
-		/* Compute virtual page address offset */
-		if (addr >= as->segs.as_vbase1 && addr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
-			offset = addr - as->segs.as_vbase1;
-			KASSERT((offset & PAGE_FRAME) == offset);
+		index = get_pt_index(as, addr);
+		if (as->control_bits[index] & PT_SWAP_BIT){
+			pt_read_from_swap(index/PAGE_SIZE, paddr);
+		}else{
+			/* Compute the offset in the elf file of the page we want to read*/
+			/* If the address is stack (not in the swap file), allocate an empty page */
+			offset = get_elf_offset(as, addr);
+			if (offset != (off_t)-1){
+				/* Read the page from the elf file */
+				if (load_from_elf(paddr, as, offset)){
+					panic("Error during the load of a page from the elf file");
+				}
+			}
 		}
-		else if (addr >= as->segs.as_vbase2 && addr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
-			offset = (addr - as->segs.as_vbase2) + as->segs.eh.e_phentsize;
-			KASSERT((offset & PAGE_FRAME) == offset);
-		}
-		else if (addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop) {
-			/* PROBLEMI: lo stack è solo nello swapfile */
-			/* Ma se abbiamo page fault su un suo indirizzo logico non carichiamo un frame
-			come per gli altri segmenti? (Giulio)
-			M, lo carichiamo però dallo swap file (Bho)
-			 */
-		}
-	}
+	} 
 
 	return paddr;
+}
+
+/*
+	Reads the page from the swapfile
+*/
+static void
+pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
+		/* Swap-in: read from the swap file */
+		switch (sf_pagein(vaddr, paddr))
+		{
+		case 0:
+			/* Everything alright */
+			break;
+		case -1:
+			/* Everything alright */
+			panic("Empty swapfile on swap-in");
+			break;
+		case -2:
+			/* Page not found, try read the elf file (?) */
+			break;
+		default:
+			break;
+		}			
+
 }
 
 /*
@@ -460,7 +478,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
 
 	npages = memsize / PAGE_SIZE;
-
 	/* We don't use these - all pages are read-write */
 	(void)readable;
 	(void)writeable;
@@ -518,7 +535,7 @@ int as_set_swapfile(char* path) {
 }
 
 /* Imported from dumbvm, should check if it works fine */
-/*
+
 static
 void
 as_zero_region(paddr_t paddr, unsigned npages)
@@ -526,7 +543,7 @@ as_zero_region(paddr_t paddr, unsigned npages)
 	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
 }
 
-*/
+
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
@@ -564,4 +581,37 @@ as_complete_load(struct addrspace *as)
 	return 0;
 }
 
+/*
+	Translate the vaddr to the page addr in the pt
+*/
+static int
+get_pt_index(struct addrspace *as, vaddr_t vaddr){
+	if(vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
+		return (vaddr - as->segs.as_vbase1)/PAGE_SIZE;
+	}
+	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
+		return (vaddr - as->segs.as_vbase2 + (as->segs.as_npages1*PAGE_SIZE))/PAGE_SIZE;
+	}else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
+		return (as->segs.as_stackptbase + (as->segs.as_stackvtop - vaddr))/PAGE_SIZE;
+	}
+}
 
+/*
+	Compute the physical offset of the page in the elf file
+*/
+static off_t
+get_elf_offset(struct addrspace *as, vaddr_t vaddr){
+	off_t offset;
+	/* Compute virtual page address offset in the file */
+			if (vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
+				offset = (vaddr - as->segs.as_vbase1) + as->segs.text_ph.p_offset;
+				KASSERT((offset & PAGE_FRAME) == offset);
+			}
+			else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
+				offset = (vaddr - as->segs.as_vbase2) + as->segs.data_ph.p_offset;
+				KASSERT((offset & PAGE_FRAME) == offset);
+			}
+			else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
+				return (off_t) -1;
+			}
+}

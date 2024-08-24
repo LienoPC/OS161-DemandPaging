@@ -30,44 +30,18 @@
 
 
 int
-load_from_elf(paddr_t *paddr, struct addrspace *as, off_t offset){
+load_from_elf(paddr_t paddr, struct addrspace *as, off_t offset){
 	
     struct iovec iov;
     struct uio frame_ku;
     
-    off_t offset = as->segs.eh.e_phoff + offset; // Offset in the ELF file of the page we want to read
-    uio_kinit(&iov, &frame_ku, &as->segs.ph, sizeof(as->segs.ph), offset, UIO_READ);
-
-   
-    result = VOP_READ(v, &frame_ku);
-    if (result) {
-        return result;
+    uio_kinit(&iov, &frame_ku, (void *) paddr, PAGE_SIZE, offset, UIO_READ);
+    if (VOP_READ(&as->elffile, &frame_ku)){
+        panic("Error during the VOP_READ in load_from_elf");
     }
-
-    if (frame_ku.uio_resid != 0) {
-        // short read; problem with executable?
-        kprintf("ELF: short read on phdr - file truncated?\n");
-        return ENOEXEC;
-    }
-
-    switch (ph.p_type) {
-        case PT_NULL: // continue;
-        case PT_PHDR: // continue;
-        case PT_MIPS_REGINFO: // continue;
-        case PT_LOAD: break;
-        default:
-        kprintf("loadelf: unknown segment type %d\n",
-            ph.p_type);
-        return ENOEXEC;
-    }
-
-    result = load_segment(as, v, ph.p_offset, ph.p_vaddr,
-                    ph.p_memsz, ph.p_filesz,
-                    ph.p_flags & PF_X);
-    if (result) {
-        return result;
-    }
+    return 0;
+    
 }
 
 
-*/
+
