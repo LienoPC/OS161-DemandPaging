@@ -184,5 +184,5 @@ releasecontiguousalloc(paddr_t p_addr, int npages){
     }
     coremap->allocSize[f_number] = 0;
     spinlock_release(&coremap->coremap_lock);
-
+    //andiamo
 }
