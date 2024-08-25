@@ -101,7 +101,11 @@ paddr_t getfreeframe() {
         }
     }
     spinlock_release(&coremap->coremap_lock);
-    addr = (paddr_t) found*PAGE_SIZE;
+    if (found == -1){
+        addr = (paddr_t) NULL;
+    }else{
+        addr = (paddr_t) found*PAGE_SIZE;
+    }
     return addr;
 }
 
