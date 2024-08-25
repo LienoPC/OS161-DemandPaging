@@ -299,14 +299,14 @@ pt_pagefault(vaddr_t addr){
 
 	/* First get the physical frame and then start the page replacement if there are no available frames */
 	paddr = getfreeframe();
-	/* Zeroing the frame */
-	as_zero_region(paddr,1);
 	if (paddr == (paddr_t) NULL){
 		/* Page Replacement */
 	}else{
+		/* Zeroing the frame */
+		as_zero_region(paddr,1);
 		index = get_pt_index(as, addr);
 		if (as->control_bits[index] & PT_SWAP_BIT){
-			pt_read_from_swap(index/PAGE_SIZE, paddr);
+			pt_read_from_swap(index*PAGE_SIZE, paddr);
 		}else{
 			/* Compute the offset in the elf file of the page we want to read*/
 			/* If the address is stack (not in the swap file), allocate an empty page */
@@ -340,6 +340,7 @@ pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
 			break;
 		case -2:
 			/* Page not found, try read the elf file (?) */
+			panic("Bad addr on swapfile");
 			break;
 		default:
 			break;
@@ -369,39 +370,6 @@ as_create(void)
 	return as;
 }
 
-int
-as_copy(struct addrspace *old, struct addrspace **ret)
-{
-	struct addrspace *newas;
-
-	newas = as_create();
-	if (newas==NULL) {
-		return ENOMEM;
-	}
-
-	/*
-	 * 	Copy the page table
-	 */
-	newas->frames = kmalloc(sizeof(paddr_t)*old->n_entry);
-	newas->control_bits = kmalloc(sizeof(unsigned char)*old->n_entry);
-	newas->n_entry = old->n_entry;
-	
-	memmove((void *)newas->frames,
-		(const void *)old->frames,
-		sizeof(paddr_t)*old->n_entry);
-
-	memmove((void *)newas->control_bits,
-	(const void *)old->control_bits,
-	sizeof(unsigned char)*old->n_entry);
-
-	/*
-		Copy the segments structure
-	*/
-	newas->segs = old->segs;
-
-	*ret = newas;
-	return 0;
-}
 
 void
 as_destroy(struct addrspace *as)
@@ -497,6 +465,11 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		return 0;
 	}
 
+	if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
+		/* Already defined the other regions, I can map the stack in the PT */
+		as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
+	}
+
 	/*
 	 * Support for more than two regions is not available.
 	 */
@@ -506,7 +479,11 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 
 /* Saves the program's elf vnode into the addrspace */
 void as_set_progelf(struct addrspace *as, struct vnode* elf) {
-	/* Increase the refcount of the elf's vnode, see runprogram for more details on this */
+	struct addrspace *as;
+
+	as = proc_getas();
+
+	/* Increase the refcount of elf's vnode, see runprogram for more details on this */
 	VOP_INCREF(elf);
 
 	as->segs.progelf = elf;
@@ -516,6 +493,9 @@ void as_set_progelf(struct addrspace *as, struct vnode* elf) {
 int as_set_swapfile(struct addrspace *as, char* path) {
 	int result;
 	struct vnode *sf;
+	struct addrspace *as;
+
+	as = proc_getas();
 
 	result = vfs_open(path, O_RDWR | O_TRUNC | O_CREAT, 0, &sf);
 	if (result) {
@@ -524,6 +504,69 @@ int as_set_swapfile(struct addrspace *as, char* path) {
 
 	as->swapfile = sf;
 
+	return 0;
+}
+
+/* Initialize the address space after the definition of all the segments */
+void
+as_initialize_pt(struct addrspace *as){
+	KASSERT(as->segs.as_vbase1 != 0);
+	KASSERT(as->segs.as_vbase2 != 0);
+	KASSERT(as->segs.as_stackptbase != 0);
+	KASSERT(as->n_entry == 0);
+
+	as->n_entry = as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES;
+	as->frames = kmalloc(as->n_entry*sizeof(paddr_t));
+	if (as->frames == NULL){
+		panic("Problem in creating page table");
+	}
+	as->control_bits = kmalloc(as->n_entry*sizeof(unsigned char));
+	if (as->control_bits == NULL) {
+		panic("Problem in creating page table");
+	}
+	as->last_c_freed = 0;
+
+
+}
+
+
+int
+as_copy(struct addrspace *old, struct addrspace **ret)
+{
+	struct addrspace *newas;
+
+	newas = as_create();
+	if (newas==NULL) {
+		return ENOMEM;
+	}
+
+	/*
+	 * 	Copy the page table
+	 */
+	newas->frames = kmalloc(sizeof(paddr_t)*old->n_entry);
+	newas->control_bits = kmalloc(sizeof(unsigned char)*old->n_entry);
+	newas->n_entry = old->n_entry;
+	newas->last_c_freed = 0;
+	
+	memmove((void *)newas->frames,
+		(const void *)old->frames,
+		sizeof(paddr_t)*old->n_entry);
+
+	memmove((void *)newas->control_bits,
+	(const void *)old->control_bits,
+	sizeof(unsigned char)*old->n_entry);
+
+	/*
+		Copy the segments structure
+	*/
+	newas->segs = old->segs;
+
+	/*
+		Copy the elf file and assign new swapfile
+	*/
+	as_set_progelf(newas, old->segs.progelf);
+
+	*ret = newas;
 	return 0;
 }
 
@@ -541,8 +584,8 @@ as_zero_region(paddr_t paddr, unsigned npages)
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
-	as->segs.as_stackvbase = USERSTACK;
-	as->segs.as_stackvtop = USERSTACK + PAGING_STACKPAGES * PAGE_SIZE;
+	as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
+	as->segs.as_stackvtop = USERSTACK;
 
 	/* Initial user-level stack pointer */
 	*stackptr = as->segs.as_stackvbase;
@@ -558,6 +601,9 @@ as_prepare_load(struct addrspace *as)
 	/*
 	 * Write this.
 	 */
+	KASSERT(as->segs.as_vbase1 == 0);
+	KASSERT(as->segs.as_vbase2 == 0);
+	KASSERT(as->segs.as_stackptbase == 0);
 
 	(void)as;
 	return 0;
