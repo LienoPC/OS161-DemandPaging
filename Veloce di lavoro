@@ -51,3 +51,6 @@ PAGE REPLACEMENT
 STATISTICS
 •	Raccogliere tutte le statistiche in uno spazio di memoria con una struct apposita
 •	Stampare tutte le statistiche quando la vm viene spenta
+
+
+AGGIUNGERE LOCK PER PAGE TABLE 

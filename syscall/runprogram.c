@@ -82,9 +82,9 @@ runprogram(char *progname)
 	}
 
 	#if OPT_PAGING
-	as_set_progelf(v);
+	as_set_progelf(as, v);
 
-	result = as_set_swapfile((char *) "SWAPFILE");
+	result = as_set_swapfile(as, (char *) "SWAPFILE");
 	if(result) {
 		vfs_close(v);
 		return result;
