@@ -107,7 +107,7 @@ runprogram(char *progname)
 	/* 
 	 * This has to be done in the PAGING config as well, as the
 	 * file will not be closed until the vnode refcount equals 0.
-	 * Currently, the refcount is 2, since as_set_progelf increases it by 1.
+	 * Currently, the refcount is 2, since as_set_progelf increased it by 1.
 	 * In as_destroy, vfs_close will be called again on as->segs.progelf,
 	 * dropping the refcount to 0, effectively closing the file. 
 	 */

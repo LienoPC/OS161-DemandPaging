@@ -486,24 +486,17 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 }
 
 /* Saves the program's elf vnode into the addrspace */
-void as_set_progelf(struct vnode* elf) {
-	struct addrspace *as;
-
-	as = proc_getas();
-
-	/* Increase the refcount of elf's vnode, see runprogram for more details on this */
+void as_set_progelf(struct addrspace *as, struct vnode* elf) {
+	/* Increase the refcount of the elf's vnode, see runprogram for more details on this */
 	VOP_INCREF(elf);
 
 	as->segs.progelf = elf;
 }
 
 /* Saves the swapfile's vnode into the addrspace */
-int as_set_swapfile(char* path) {
+int as_set_swapfile(struct addrspace *as, char* path) {
 	int result;
 	struct vnode *sf;
-	struct addrspace *as;
-
-	as = proc_getas();
 
 	result = vfs_open(path, O_RDWR | O_TRUNC | O_CREAT, 0, &sf);
 	if (result) {
