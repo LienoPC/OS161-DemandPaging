@@ -73,8 +73,8 @@ struct addrspace {
         paddr_t *frames;
         unsigned char *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
         int n_entry;
+        int last_c_freed;
         struct vnode *swapfile; // Swapfile vnode 
-        struct vnode elffile; // Elf vnode
         struct segments segs;  // Elf header segments
 
 #endif
