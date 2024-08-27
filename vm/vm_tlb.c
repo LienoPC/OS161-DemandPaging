@@ -39,8 +39,10 @@ void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 	uint32_t ehi, elo, index;
 	int spl;
 	(void) as;
-	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
+	/* 
+	 * Disable interrupts on this CPU while frobbing the TLB.
+	 * spl = splhigh();
+	 */
 
 	/* Find a free entry or select one to replace */
 	index = tlb_findfree();
@@ -57,6 +59,6 @@ void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 
 	DEBUG(DB_VM, "TLB new entry: %u: 0x%x -> 0x%x\n", index, ehi, elo);
 	tlb_write(ehi, elo, index);	
-	splx(spl);
+	// splx(spl);
 }
 
