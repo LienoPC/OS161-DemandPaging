@@ -30,7 +30,7 @@
 
 
 int
-load_from_elf(paddr_t paddr, struct addrspace *as, off_t offset){
+load_from_elf(struct addrspace *as, paddr_t paddr, off_t offset){
 	
     struct iovec iov;
     struct uio frame_ku;

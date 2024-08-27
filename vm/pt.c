@@ -36,17 +36,16 @@
 #include <proc.h>
 #include <current.h>
 #include <mips/tlb.h>
-/*
 #include <elf.h>
 #include <vnode.h>
 #include <segments.h>
-*/
 #include <addrspace.h>
 #include <vm_tlb.h>
 #include <vm.h>
 #include <vfs.h>
-#include <pt.h>
+#include <swapfile.h>
 #include <coremap.h>
+#include <pt.h>
 #include <kern/fcntl.h>
 
 
@@ -66,6 +65,100 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 	memory frames) and prepare data structures for page table
 *
 */
+
+static
+void
+as_zero_region(paddr_t paddr, unsigned npages);
+
+static int
+get_pt_index(struct addrspace *as, vaddr_t vaddr);
+
+static off_t
+get_elf_offset(struct addrspace *as, vaddr_t vaddr);
+
+static void
+pt_read_from_swap(vaddr_t vaddr, paddr_t paddr);
+
+
+
+/*
+	Translate the vaddr to the page addr in the pt
+*/
+static int
+get_pt_index(struct addrspace *as, vaddr_t vaddr){
+	int index = -1;
+	if(vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
+		index = (vaddr - as->segs.as_vbase1)/PAGE_SIZE;
+	}
+	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
+		index = (vaddr - as->segs.as_vbase2 + (as->segs.as_npages1*PAGE_SIZE))/PAGE_SIZE;
+	}else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
+		index = (as->segs.as_stackptbase + (as->segs.as_stackvtop - vaddr))/PAGE_SIZE;
+	}else{
+		// Invalid vaddr
+		index = -1;
+	}
+	return index;
+}
+
+/*
+	Compute the physical offset of the page in the elf file
+*/
+static off_t
+get_elf_offset(struct addrspace *as, vaddr_t vaddr){
+	off_t offset;
+	/* Compute virtual page address offset in the file */
+	if (vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
+		offset = (vaddr - as->segs.as_vbase1) + as->segs.text_ph.p_offset;
+		KASSERT((offset & PAGE_FRAME) == offset);
+	}
+	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
+		offset = (vaddr - as->segs.as_vbase2) + as->segs.data_ph.p_offset;
+		KASSERT((offset & PAGE_FRAME) == offset);
+	}
+	else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
+		offset = (off_t) -1;
+	}else{
+		offset = (off_t) -1;
+	}
+	return offset;
+}
+
+/* Imported from dumbvm, should check if it works fine */
+
+static
+void
+as_zero_region(paddr_t paddr, unsigned npages)
+{
+	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
+}
+
+
+/*
+	Reads the page from the swapfile
+*/
+static void
+pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
+		/* Swap-in: read from the swap file */
+		switch (sf_pagein(vaddr, paddr))
+		{
+		case 0:
+			/* Everything alright */
+			break;
+		case -1:
+			/* Everything alright */
+			panic("Empty swapfile on swap-in");
+			break;
+		case -2:
+			/* Page not found, try read the elf file (?) */
+			panic("Bad addr on swapfile");
+			break;
+		default:
+			break;
+		}			
+
+}
+
 
 void
 vm_bootstrap(void)
@@ -98,9 +191,11 @@ vm_can_sleep(void)
 vaddr_t
 alloc_kpages(unsigned npages)
 {
+
 	(void) npages;
-	paddr_t pa;
+	paddr_t pa, first_steal, search;
 	struct addrspace *as;
+	int i,j;
 	vm_can_sleep();
 	if (isCoremapActive()) {
 		/* Use standard paging methods */
@@ -109,7 +204,31 @@ alloc_kpages(unsigned npages)
 			/* Could not find enough continuous pages, we should steal user pages  */
 			/* TODO */
 			as = proc_getas();
+			/* First search for contiguous nframes to steal from the user */
+			first_steal = findfirsttosteal(npages);
 			
+			if(first_steal == (paddr_t)NULL){
+				/* Didn't found enough memory on contiguous steal, out of memory*/
+				panic("Completely out of memory!");
+			}
+
+			/* Starting from the first frame, execute the page-out for every frame in the interval */
+			for(i = 0; i < (int)npages; i++){
+				search = first_steal + PAGE_SIZE*i;
+				for(j = 0; j < as->n_entry; j++){
+					if (as->frames[j] == search){
+						// Found the frame, free it
+						if(!pt_pageout(j)){
+							panic("Could not steal a user frame");
+						}
+						
+					}
+				}
+			}
+			
+			/* Effectively assign to kernel the freed pages */
+			pa = stealcontinuousalloc(npages, first_steal);
+
 		}
 
 	}else{
@@ -249,19 +368,14 @@ pt_getframe(vaddr_t addr){
 	paddr_t paddr = (paddr_t)NULL;
 	int i;
 	struct addrspace *as;
-	(void) paddr;
 	as = proc_getas();
 
-	if(addr >= as->segs.as_stackvbase && addr < as->segs.as_stackvtop){
-		/* Stack address, has to be mapped down */
-		addr = as->segs.as_stackptbase + (as->segs.as_stackvtop - addr);
-	}
 	KASSERT((addr & PAGE_FRAME) == addr);
 	/* Get the index of the PT */
 	i = get_pt_index(as, addr);
 	/* Verify if the entry is valid */
 	if (as->control_bits[i] & PT_VALID_BIT){
-		/* Return the physical frame */
+		/* Page is in memory, return the physical frame */
 		paddr = as->frames[i];
 	}else{
 		/* PAGE FAULT: frame not in memory */
@@ -270,6 +384,7 @@ pt_getframe(vaddr_t addr){
 		as->frames[i] = paddr;
 		/* now the pt entry is valid */ 
 		as->control_bits[i] |= PT_VALID_BIT;
+		
 
 	}
 	return paddr;
@@ -303,13 +418,16 @@ pt_pagefault(vaddr_t addr){
 			pt_read_from_swap(index*PAGE_SIZE, paddr);
 		}else{
 			/* Compute the offset in the elf file of the page we want to read*/
-			/* If the address is stack (not in the swap file), allocate an empty page */
+			/* If the address is stack (not in the swap file), allocate an empty frame */
 			offset = get_elf_offset(as, addr);
 			if (offset != (off_t)-1){
 				/* Read the page from the elf file */
-				if (load_from_elf(paddr, as, offset)){
+				if (load_from_elf(as, paddr, offset)){
 					panic("Error during the load of a page from the elf file");
 				}
+			}else{
+				/* If is the first access to a stack page (hopefully write), we set the swap bit on the entry */
+				as->control_bits[index] |= PT_SWAP_BIT;
 			}
 		}
 	} 
@@ -317,29 +435,33 @@ pt_pagefault(vaddr_t addr){
 	return paddr;
 }
 
-/*
-	Reads the page from the swapfile
-*/
-static void
-pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
-		/* Swap-in: read from the swap file */
-		switch (sf_pagein(vaddr, paddr))
-		{
-		case 0:
-			/* Everything alright */
-			break;
-		case -1:
-			/* Everything alright */
-			panic("Empty swapfile on swap-in");
-			break;
-		case -2:
-			/* Page not found, try read the elf file (?) */
-			panic("Bad addr on swapfile");
-			break;
-		default:
-			break;
-		}			
+/* 	
+	Executes the page-out of a page in the PT 
 
+	-Invalid the entry 
+	-Verify the swap bit and swap-out the page
+	-Zero the pframe
+
+*/
+
+int
+pt_pageout(int index){	
+	struct addrspace *as;
+	as = proc_getas();
+
+	as->control_bits[index] &= ~(PT_VALID_BIT);
+	
+	if (as->control_bits[index] & PT_SWAP_BIT || as->control_bits[index] & PT_DIRTY_BIT){
+		/* This page works on the swap file */
+		sf_pageout(index*PAGE_SIZE, as->frames[index], -1);
+		/* Set the swap bit if the swap-out is executed on dirty bit */
+		if (!(as->control_bits[index] & PT_SWAP_BIT)){
+			as->control_bits[index] |= PT_SWAP_BIT; 
+		}
+	}
+
+	as_zero_region(as->frames[index], 1);
+	return 0;
 }
 
 /*
@@ -473,10 +595,6 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 
 /* Saves the program's elf vnode into the addrspace */
 void as_set_progelf(struct addrspace *as, struct vnode* elf) {
-	struct addrspace *as;
-
-	as = proc_getas();
-
 	/* Increase the refcount of elf's vnode, see runprogram for more details on this */
 	VOP_INCREF(elf);
 
@@ -487,10 +605,6 @@ void as_set_progelf(struct addrspace *as, struct vnode* elf) {
 int as_set_swapfile(struct addrspace *as, char* path) {
 	int result;
 	struct vnode *sf;
-	struct addrspace *as;
-
-	as = proc_getas();
-
 	result = vfs_open(path, O_RDWR | O_TRUNC | O_CREAT, 0, &sf);
 	if (result) {
 		return result;
@@ -564,15 +678,6 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	return 0;
 }
 
-/* Imported from dumbvm, should check if it works fine */
-
-static
-void
-as_zero_region(paddr_t paddr, unsigned npages)
-{
-	bzero((void *)PADDR_TO_KVADDR(paddr), npages * PAGE_SIZE);
-}
-
 
 
 int
@@ -612,39 +717,4 @@ as_complete_load(struct addrspace *as)
 
 	(void)as;
 	return 0;
-}
-
-/*
-	Translate the vaddr to the page addr in the pt
-*/
-static int
-get_pt_index(struct addrspace *as, vaddr_t vaddr){
-	if(vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
-		return (vaddr - as->segs.as_vbase1)/PAGE_SIZE;
-	}
-	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
-		return (vaddr - as->segs.as_vbase2 + (as->segs.as_npages1*PAGE_SIZE))/PAGE_SIZE;
-	}else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
-		return (as->segs.as_stackptbase + (as->segs.as_stackvtop - vaddr))/PAGE_SIZE;
-	}
-}
-
-/*
-	Compute the physical offset of the page in the elf file
-*/
-static off_t
-get_elf_offset(struct addrspace *as, vaddr_t vaddr){
-	off_t offset;
-	/* Compute virtual page address offset in the file */
-			if (vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
-				offset = (vaddr - as->segs.as_vbase1) + as->segs.text_ph.p_offset;
-				KASSERT((offset & PAGE_FRAME) == offset);
-			}
-			else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
-				offset = (vaddr - as->segs.as_vbase2) + as->segs.data_ph.p_offset;
-				KASSERT((offset & PAGE_FRAME) == offset);
-			}
-			else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
-				return (off_t) -1;
-			}
 }

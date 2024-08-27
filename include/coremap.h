@@ -11,7 +11,7 @@
 struct coremap_t {
     unsigned char *bitmap; // Bitmap structure
     int *allocSize; // Vector to mantain information about continuous alloc
-    int nRamFrames;// Total number of ram frames outside the initial usage of the ram_stealmem
+    int nRamFrames;// Total number of ram frames
     struct spinlock coremap_lock;
     int last_frame; // Last allocated frame
 };
@@ -23,6 +23,8 @@ void            coremap_bootstrap(void);
 paddr_t         getfreeframe(void);
 
 paddr_t         getcontinuousalloc(int npages);
+
+paddr_t         findfirsttosteal(int npages);
 
 paddr_t         stealcontinuousalloc(int npages, paddr_t first);
 

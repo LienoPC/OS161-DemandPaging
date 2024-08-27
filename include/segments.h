@@ -17,7 +17,6 @@ struct segments {
     vaddr_t as_stackptbase;
 };
 
-int
-load_from_elf(paddr_t paddr, struct addrspace *as, off_t offset);
+
 
 #endif
