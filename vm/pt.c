@@ -224,17 +224,11 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	/* 
-		If faultaddress is already in memory, load the appropriate paddr in the TLB,
-	   	setting the dirty bit according to faultaddress' segment.
-
-		if(pt_getppage(faultaddress) is a valid ppage) {...}
-
-	   	Else: the page must be loaded from the elf to ram, the PT must be updated
-	   	and then the newly mapped paddr must be loaded in the TLB
-
-		tlb_load(pt_loadpage(faultaddress))
-	*/
-
+	 * If faultaddress is already in memory, load the appropriate paddr in the TLB,
+	 * setting the dirty bit according to faultaddress' segment.
+	 * Otherwise the page must be loaded from the elf to ram, the PT must be updated
+	 * and then the newly mapped paddr must be loaded in the TLB
+	 */
 	paddr = pt_getframe(faultaddress);
 
 	/* make sure paddr is page-aligned */

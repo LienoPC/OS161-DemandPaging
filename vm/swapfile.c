@@ -123,28 +123,23 @@ void sf_pageout(vaddr_t vaddr, paddr_t paddr, off_t offset) {
         if(!sf_can_fit_page()) {
             panic("Out of swap space");
         }
-
         uio_kinit(&header_iov, &header_ku, &vaddr, sizeof(vaddr), (off_t) filesz, UIO_WRITE);
-        if(VOP_WRITE(as->swapfile, &header_ku)) {
-            panic("Error during the first VOP_WRITE in sf_pageout");
-        }
         uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) (filesz + sizeof(vaddr)), UIO_WRITE);
-        if(VOP_WRITE(as->swapfile, &data_ku)) {
-            panic("Error during the second VOP_WRITE in sf_pageout");
-        }
+        
     }
     else {
         /* Make sure the offset is aligned to the page size on the swapfile (considering the "header") */
         KASSERT(offset % ((off_t) (PAGE_SIZE + sizeof(vaddr))) == 0);
-
         uio_kinit(&header_iov, &header_ku, &vaddr, sizeof(vaddr), offset, UIO_WRITE);
-        if(VOP_WRITE(as->swapfile, &header_ku)) {
-            panic("Error during the first VOP_WRITE in sf_pageout");
-        }
         uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) (offset + sizeof(vaddr)), UIO_WRITE);
-        if(VOP_WRITE(as->swapfile, &data_ku)) {
-            panic("Error during the second VOP_WRITE in sf_pageout");
-        }
+    }
+
+    if(VOP_WRITE(as->swapfile, &header_ku)) {
+        panic("Error during the first VOP_WRITE in sf_pageout");
+    }
+        
+    if(VOP_WRITE(as->swapfile, &data_ku)) {
+        panic("Error during the second VOP_WRITE in sf_pageout");
     }
 }
 
@@ -187,7 +182,7 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
         header_ku.uio_offset += (PAGE_SIZE + sizeof(header));
     }
 
-    /* A match must be found, otherwise the replacement shouldn't have been started */
+    /* A match must be found, otherwise the replacement shouldn't have started */
     KASSERT(header == dst_vaddr);
     page_offset = (off_t) header_ku.uio_offset;
 
@@ -200,7 +195,7 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
     /* Page out of the victim */
     sf_pageout(vic_vaddr, vic_paddr, page_offset);
 
-    /* Copy the content of the buffer in the destination frame*/
+    /* Copy the content of the buffer in the destination frame */
     uint8_t *ptr = (uint8_t *) dst_paddr;
     for (size_t i = 0; i < PAGE_SIZE; i++) {
         ptr[i] = buf[i];
