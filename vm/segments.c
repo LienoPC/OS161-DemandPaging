@@ -30,13 +30,13 @@
 
 
 int
-load_from_elf(paddr_t paddr, struct addrspace *as, off_t offset){
+load_from_elf(struct addrspace *as, paddr_t paddr, off_t offset){
 	
     struct iovec iov;
     struct uio frame_ku;
     
     uio_kinit(&iov, &frame_ku, (void *) paddr, PAGE_SIZE, offset, UIO_READ);
-    if (VOP_READ(&as->elffile, &frame_ku)){
+    if (VOP_READ(as->segs.progelf, &frame_ku)){
         panic("Error during the VOP_READ in load_from_elf");
     }
     return 0;

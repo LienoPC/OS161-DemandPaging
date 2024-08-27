@@ -10,5 +10,6 @@ thread.o: ../../thread/thread.c ../../include/types.h \
  includelinks/kern/machine/setjmp.h ../../include/threadprivate.h \
  ../../include/proc.h opt-waitpid.h ../../include/current.h \
  includelinks/machine/current.h ../../include/synch.h opt-synch.h \
- ../../include/addrspace.h ../../include/vm.h opt-dumbvm.h \
- ../../include/mainbus.h ../../include/vnode.h
+ ../../include/addrspace.h ../../include/vm.h opt-paging.h \
+ ../../include/vnode.h ../../include/elf.h includelinks/machine/elf.h \
+ ../../include/segments.h ../../include/mainbus.h

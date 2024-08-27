@@ -48,7 +48,6 @@ coremap_bootstrap(void){
     if (coremap->bitmap == NULL){
          /*problemi nell'allocazione del bootstrap*/
         kprintf("Problemi allocazione bitmap");
-
     }
     coremap->allocSize = kmalloc(sizeof(int) *  coremap->nRamFrames);
     kprintf("AllocSize: %p", coremap->allocSize);
@@ -143,6 +142,52 @@ paddr_t getcontinuousalloc(int npages){
 
   return addr;
 }
+
+/*
+    Finds the interval of user frame to steal, returning the first frame to the pt
+*/
+paddr_t findfirsttosteal(int npages){
+    
+    int i;
+    int f_first, counter, skip;
+    paddr_t p_first = (paddr_t) NULL;
+    f_first = -1;
+    counter = 0;
+    skip = 0;
+    spinlock_acquire(&coremap->coremap_lock);
+    for(i = 0; i < coremap->nRamFrames; i++){
+
+        if (coremap->allocSize[i] != 0){
+            skip = (int)coremap->allocSize[i];
+            counter = 0;
+            f_first = -1;
+        }
+        if(skip > 0){
+            skip--;
+            continue;
+        }
+        if (coremap->allocSize[i] == 0 && f_first != -1){
+            // the page belongs to the user
+            counter++;
+            if (counter == npages){
+                break;
+            }   
+        }
+        if(coremap->allocSize[i] == 0 && f_first == -1){
+            // first user frame found in the interval
+            f_first = i;
+            counter = 1;
+        }
+    }
+    if(f_first != -1){
+        // found enough contiguous frames
+        p_first = f_first*PAGE_SIZE;
+    }
+    spinlock_release(&coremap->coremap_lock);
+    return p_first;
+
+}
+
 
 /* If the kernel needs npages for continuos allocation (and they aren't available through getcontinuousalloc)
     npages are freed from the user space and the corresponding page table entries are swapped-out

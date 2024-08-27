@@ -153,6 +153,15 @@ int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
 
 paddr_t                 pt_getframe(vaddr_t addr);
 paddr_t                 pt_pagefault(vaddr_t addr);
+int                     pt_pageout(int index);
+void                    as_initialize_pt(struct addrspace *as);
+
+/*
+        Fuctions in segments.c
+*/
+
+int
+load_from_elf(struct addrspace *as, paddr_t paddr, off_t offset);
 
 /*
  * Functions in loadelf.c
