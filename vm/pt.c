@@ -269,6 +269,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	paddr_t paddr = (paddr_t)NULL;
 	struct addrspace *as;
 	bool readonly;
+	int spl;
 
 	faultaddress &= PAGE_FRAME;
 
@@ -342,24 +343,24 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
+	/* Disable interrupts while handling possible page faults and frobbing the TLB */
+	spl = splhigh();
+
 	/* 
-		If faultaddress is already in memory, load the appropriate paddr in the TLB,
-	   	setting the dirty bit according to faultaddress' segment.
-
-		if(pt_getppage(faultaddress) is a valid ppage) {...}
-
-	   	Else: the page must be loaded from the elf to ram, the PT must be updated
-	   	and then the newly mapped paddr must be loaded in the TLB
-
-		tlb_load(pt_loadpage(faultaddress))
-	*/
-
+	 * If faultaddress is already in memory, load the appropriate paddr in the TLB,
+	 * setting the dirty bit according to faultaddress' segment.
+	 * Otherwise the page must be loaded from the elf to ram, the PT must be updated
+	 * and then the newly mapped paddr must be loaded in the TLB
+	 */
 	paddr = pt_getframe(faultaddress);
 
 	/* make sure paddr is page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
 	tlb_loadentry(faultaddress, paddr, readonly);
+	/* Re-enable interrupts */
+	splx(spl);
+	
 	return 0;
 }
 
@@ -377,6 +378,7 @@ pt_getframe(vaddr_t addr){
 	as = proc_getas();
 
 	KASSERT((addr & PAGE_FRAME) == addr);
+
 	/* Get the index of the PT */
 	i = get_pt_index(as, addr);
 	/* Verify if the entry is valid */
