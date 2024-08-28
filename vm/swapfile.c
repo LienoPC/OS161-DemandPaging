@@ -196,7 +196,7 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
     sf_pageout(vic_vaddr, vic_paddr, page_offset);
 
     /* Copy the content of the buffer in the destination frame */
-    memmove((void *) dst_paddr, (const void *) &buf, sizeof(buf));
+    memmove((void *) PADDR_TO_KVADDR(dst_paddr), (const void *) &buf, sizeof(buf));
 
     /*
     uint8_t *ptr = (uint8_t *) dst_paddr;
