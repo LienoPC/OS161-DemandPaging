@@ -89,6 +89,7 @@ runprogram(char *progname)
 		vfs_close(v);
 		return result;
 	}
+	
 	#endif
 
 	/* Switch to it and activate it. */
@@ -119,6 +120,11 @@ runprogram(char *progname)
 		/* p_addrspace will go away when curproc is destroyed */
 		return result;
 	}
+
+	#if OPT_PAGING
+	/* Initialize the page table of the process */
+	as_initialize_pt(as);
+	#endif
 
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,

@@ -587,11 +587,7 @@ as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
 		return 0;
 	}
 
-	if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
-		/* Already defined the other regions, I can map the stack in the PT */
-		as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
-	}
-
+	
 	/*
 	 * Support for more than two regions is not available.
 	 */
@@ -624,6 +620,7 @@ int as_set_swapfile(struct addrspace *as, char* path) {
 /* Initialize the address space after the definition of all the segments */
 void
 as_initialize_pt(struct addrspace *as){
+	int i;
 	KASSERT(as->segs.as_vbase1 != 0);
 	KASSERT(as->segs.as_vbase2 != 0);
 	KASSERT(as->segs.as_stackptbase != 0);
@@ -634,9 +631,12 @@ as_initialize_pt(struct addrspace *as){
 	if (as->frames == NULL){
 		panic("Problem in creating page table");
 	}
-	as->control_bits = kmalloc(as->n_entry*sizeof(unsigned char));
+	as->control_bits = kmalloc(as->n_entry*(sizeof(unsigned char)));
 	if (as->control_bits == NULL) {
 		panic("Problem in creating page table");
+	}
+	for(i = 0; i < as->n_entry; i++){
+		as->control_bits[i] = 0;
 	}
 	as->last_c_freed = 0;
 
@@ -691,6 +691,11 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {
 	as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
 	as->segs.as_stackvtop = USERSTACK;
+
+	if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
+		/* Already defined the other regions, I can map the stack in the PT */
+		as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
+	}
 
 	/* Initial user-level stack pointer */
 	*stackptr = as->segs.as_stackvbase;

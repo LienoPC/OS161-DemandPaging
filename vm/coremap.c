@@ -35,9 +35,8 @@ void
 coremap_bootstrap(void){
     int bootstrap_pages = 0;
     int i;
+    
     /* Alloc coremap struct */
-    kprintf("Allocazione bootstrap");
-
     coremap = kmalloc(sizeof(*coremap));
     if (coremap == NULL){
         /*problemi nell'allocazione del bootstrap*/
@@ -50,7 +49,6 @@ coremap_bootstrap(void){
         kprintf("Problemi allocazione bitmap");
     }
     coremap->allocSize = kmalloc(sizeof(int) *  coremap->nRamFrames);
-    kprintf("AllocSize: %p", coremap->allocSize);
     if (coremap->allocSize == NULL){
          /*problemi nell'allocazione del bootstrap*/
         kprintf("Problemi allocazione allocSize");
