@@ -156,7 +156,7 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
     vaddr_t header = -1;
     off_t filesz, page_offset;
     struct addrspace *as;
-    char buf[PAGE_SIZE];
+    uint8_t buf[PAGE_SIZE];
 
     as = proc_getas();
     filesz = sf_getsize();
@@ -196,8 +196,12 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
     sf_pageout(vic_vaddr, vic_paddr, page_offset);
 
     /* Copy the content of the buffer in the destination frame */
+    memmove((void *) PADDR_TO_KVADDR(dst_paddr), (const void *) &buf, sizeof(buf));
+
+    /*
     uint8_t *ptr = (uint8_t *) dst_paddr;
     for (size_t i = 0; i < PAGE_SIZE; i++) {
         ptr[i] = buf[i];
     }
+    */
 }

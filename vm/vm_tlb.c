@@ -38,8 +38,7 @@ static uint32_t tlb_get_rr_victim(void) {
 void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 	struct addrspace *as;
 	uint32_t ehi, elo, index;
-	int spl;
-	(void) spl;
+	// int spl;
 	(void) as;
 	/* 
 	 * Disable interrupts on this CPU while frobbing the TLB.
