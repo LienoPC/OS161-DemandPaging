@@ -519,6 +519,7 @@ as_destroy(struct addrspace *as)
 	*/
 	kfree(as->frames);
 	kfree(as->control_bits);
+	pt_fifo_free(as->page_queue);
 
 	vfs_close(as->swapfile);
 	vfs_close(as->segs.progelf);
