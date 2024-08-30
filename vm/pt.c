@@ -39,6 +39,7 @@
 #include <elf.h>
 #include <vnode.h>
 #include <segments.h>
+#include <pt_fifo.h>
 #include <addrspace.h>
 #include <vm_tlb.h>
 #include <vm.h>
@@ -46,7 +47,6 @@
 #include <swapfile.h>
 #include <coremap.h>
 #include <pt.h>
-#include <pt_fifo.h>
 #include <kern/fcntl.h>
 
 

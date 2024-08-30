@@ -12,4 +12,4 @@ thread.o: ../../thread/thread.c ../../include/types.h \
  includelinks/machine/current.h ../../include/synch.h opt-synch.h \
  ../../include/addrspace.h ../../include/vm.h opt-paging.h \
  ../../include/vnode.h ../../include/elf.h includelinks/machine/elf.h \
- ../../include/segments.h ../../include/mainbus.h
+ ../../include/segments.h ../../include/pt_fifo.h ../../include/mainbus.h

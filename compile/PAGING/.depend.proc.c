@@ -9,4 +9,5 @@ proc.o: ../../proc/proc.c ../../include/types.h \
  ../../include/setjmp.h includelinks/kern/machine/setjmp.h \
  ../../include/addrspace.h ../../include/vm.h includelinks/machine/vm.h \
  opt-paging.h ../../include/vnode.h ../../include/elf.h \
- includelinks/machine/elf.h ../../include/segments.h
+ includelinks/machine/elf.h ../../include/segments.h \
+ ../../include/pt_fifo.h

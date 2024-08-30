@@ -47,6 +47,7 @@
 #include <vnode.h>
 #include <elf.h>
 #include <segments.h>
+#include <pt_fifo.h> 
 #endif
 
 struct vnode;

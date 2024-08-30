@@ -7,6 +7,7 @@ swapfile.o: ../../vm/swapfile.c ../../include/types.h \
  includelinks/machine/spinlock.h ../../include/uio.h \
  ../../include/kern/iovec.h ../../include/addrspace.h ../../include/vm.h \
  includelinks/machine/vm.h opt-paging.h ../../include/elf.h \
- includelinks/machine/elf.h ../../include/segments.h ../../include/proc.h \
- opt-waitpid.h ../../include/stat.h ../../include/kern/stat.h \
+ includelinks/machine/elf.h ../../include/segments.h \
+ ../../include/pt_fifo.h ../../include/proc.h opt-waitpid.h \
+ ../../include/stat.h ../../include/kern/stat.h \
  ../../include/kern/stattypes.h ../../include/swapfile.h
