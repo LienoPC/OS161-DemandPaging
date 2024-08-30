@@ -458,6 +458,7 @@ optfile paging vm/segments.c
 optfile paging vm/swapfile.c
 optfile paging vm/vm_tlb.c
 optfile paging vm/vmstats.c
+optfile paging vm/pt_fifo.c
 
 defoption waitpid
 defoption fork
