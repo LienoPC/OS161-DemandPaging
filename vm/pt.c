@@ -321,8 +321,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 
 	vbase1 = as->segs.as_vbase1;
 	vtop1 = vbase1 + as->segs.as_npages1 * PAGE_SIZE;
+
 	vbase2 = as->segs.as_vbase2;
-	vtop2 = vbase2 + as->segs.as_npages2 * PAGE_SIZE;
+	vtop2 = as->segs.as_vbase2 + as->segs.as_npages2 * PAGE_SIZE;
+	//kprintf("%d", as->segs.as_npages2);
 	stackbase = as->segs.as_stackvbase;
 	stacktop = as->segs.as_stackvtop;
 	
@@ -333,8 +335,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		 */
 		readonly = true;
 	}
-	else if ((faultaddress >= vbase2 && faultaddress < vtop2) ||
-			 (faultaddress >= stackbase && faultaddress < stacktop)) {
+	else if ((faultaddress >= vbase2 && faultaddress < vtop2) || (faultaddress >= stackbase && faultaddress < stacktop)) {
 		readonly = false;
 	}
 	else {
@@ -343,8 +344,7 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 		return EFAULT;
 	}
 
-	/* Disable interrupts while handling possible page faults and frobbing the TLB */
-	spl = splhigh();
+	
 
 	/* 
 	 * If faultaddress is already in memory, load the appropriate paddr in the TLB,
@@ -354,6 +354,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	 */
 	paddr = pt_getframe(faultaddress);
 
+/* Disable interrupts while handling possible page faults and frobbing the TLB */
+	spl = splhigh();
 	/* make sure paddr is page-aligned */
 	KASSERT((paddr & PAGE_FRAME) == paddr);
 
@@ -700,7 +702,7 @@ as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 	}
 
 	/* Initial user-level stack pointer */
-	*stackptr = as->segs.as_stackvbase;
+	*stackptr = as->segs.as_stackvtop;
 
 	return 0;
 }

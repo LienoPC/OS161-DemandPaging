@@ -35,7 +35,7 @@ load_from_elf(struct addrspace *as, paddr_t paddr, off_t offset){
     struct iovec iov;
     struct uio frame_ku;
     
-    uio_kinit(&iov, &frame_ku, (void *) paddr, PAGE_SIZE, offset, UIO_READ);
+    uio_kinit(&iov, &frame_ku, (void *) PADDR_TO_KVADDR(paddr), PAGE_SIZE, offset, UIO_READ);
     if (VOP_READ(as->segs.progelf, &frame_ku)){
         panic("Error during the VOP_READ in load_from_elf");
     }

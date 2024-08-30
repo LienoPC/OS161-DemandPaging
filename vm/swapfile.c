@@ -89,7 +89,7 @@ int sf_pagein(vaddr_t vaddr, paddr_t paddr) {
         return -2;
     }
 
-    uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) header_ku.uio_offset + sizeof(header), UIO_READ);
+    uio_kinit(&data_iov, &data_ku, (void *) PADDR_TO_KVADDR(paddr), PAGE_SIZE, (off_t) header_ku.uio_offset + sizeof(header), UIO_READ);
     if (VOP_READ(as->swapfile, &data_ku)) {
         panic("Error during the second VOP_READ in sf_pagein");
     }
@@ -124,14 +124,14 @@ void sf_pageout(vaddr_t vaddr, paddr_t paddr, off_t offset) {
             panic("Out of swap space");
         }
         uio_kinit(&header_iov, &header_ku, &vaddr, sizeof(vaddr), (off_t) filesz, UIO_WRITE);
-        uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) (filesz + sizeof(vaddr)), UIO_WRITE);
+        uio_kinit(&data_iov, &data_ku, (void *)PADDR_TO_KVADDR(paddr), PAGE_SIZE, (off_t) (filesz + sizeof(vaddr)), UIO_WRITE);
         
     }
     else {
         /* Make sure the offset is aligned to the page size on the swapfile (considering the "header") */
         KASSERT(offset % ((off_t) (PAGE_SIZE + sizeof(vaddr))) == 0);
         uio_kinit(&header_iov, &header_ku, &vaddr, sizeof(vaddr), offset, UIO_WRITE);
-        uio_kinit(&data_iov, &data_ku, (void *) paddr, PAGE_SIZE, (off_t) (offset + sizeof(vaddr)), UIO_WRITE);
+        uio_kinit(&data_iov, &data_ku, (void *) PADDR_TO_KVADDR(paddr), PAGE_SIZE, (off_t) (offset + sizeof(vaddr)), UIO_WRITE);
     }
 
     if(VOP_WRITE(as->swapfile, &header_ku)) {

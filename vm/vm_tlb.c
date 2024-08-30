@@ -2,12 +2,13 @@
 #include <lib.h>
 #include <spl.h>
 #include <../arch/mips/include/tlb.h>
+#include <spinlock.h>
 #include <vm_tlb.h>
 
 static uint32_t tlb_findfree(); 
 static uint32_t tlb_get_rr_victim(void);    
 
-
+struct spinlock tlb_lock = SPINLOCK_INITIALIZER;
 
 static uint32_t tlb_findfree() {
     uint32_t ehi, elo;
@@ -38,19 +39,33 @@ void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 	struct addrspace *as;
 	uint32_t ehi, elo, index;
 	int spl;
+	(void) spl;
 	(void) as;
 	/* 
 	 * Disable interrupts on this CPU while frobbing the TLB.
 	 * spl = splhigh();
 	 */
+	
+
+	//kprintf("Before findfree\n");
+	/* Debug the content of the tlb */
+	/*
+	for (uint32_t i=0; i<NUM_TLB; i++) {
+		tlb_read(&ehi, &elo, i);
+		kprintf("TLB ENTRY %d: %u%u, valid bit %u\n", i, ehi,elo, elo & TLBLO_VALID);
+	}
+	*/
+	
+	
 
 	/* Find a free entry or select one to replace */
 	index = tlb_findfree();
 	if (index == NUM_TLB) {
 		index = tlb_get_rr_victim();
 	}
-
+	spinlock_acquire(&tlb_lock);
 	ehi = vaddr & TLBHI_VPAGE;
+	paddr = paddr & TLBLO_PPAGE;
 	/* Set dirty bit only if vpage does not belong to the elf's text segment */
 	if (readonly)
 		elo = paddr | TLBLO_VALID;
@@ -59,6 +74,19 @@ void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 
 	DEBUG(DB_VM, "TLB new entry: %u: 0x%x -> 0x%x\n", index, ehi, elo);
 	tlb_write(ehi, elo, index);	
-	// splx(spl);
+
+	spinlock_release(&tlb_lock);
+
+	/* Debug the content of the tlb */
+	/*
+	for (uint32_t i=0; i<NUM_TLB; i++) {
+		tlb_read(&ehi, &elo, i);
+		kprintf("TLB ENTRY %d: %u%u, valid bit %u\n", i, ehi,elo, elo & TLBLO_VALID);
+	}
+	kprintf("\n\n");
+	*/
+	
+
+	//splx(spl);
 }
 
