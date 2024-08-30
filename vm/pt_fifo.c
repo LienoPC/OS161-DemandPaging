@@ -1,4 +1,5 @@
 #include <types.h>
+#include <lib.h>  
 #include <pt_fifo.h>
 
 struct node {
@@ -12,8 +13,8 @@ struct pt_fifo {
     node_t *tail;
 };
 
-pt_fifo_t *fifo_init(void) {
-    pt_fifo_t *fifo = (pt_fifo_t *) malloc(sizeof(pt_fifo_t));
+pt_fifo_t *pt_fifo_init(void) {
+    pt_fifo_t *fifo = (pt_fifo_t *) kmalloc(sizeof(pt_fifo_t));
     if(fifo == NULL) {
         panic("Error during FIFO init");
     }
@@ -22,17 +23,17 @@ pt_fifo_t *fifo_init(void) {
     return fifo;
 }
 
-void fifo_push_back(pt_fifo_t *fifo, int pt_index) {
+void pt_fifo_push_back(pt_fifo_t *fifo, int pt_index) {
     if(fifo == NULL) {
-        panic("FIFO is NULL in fifo_push_back");
+        panic("FIFO is NULL in pt_fifo_push_back");
     }
     if((fifo->tail == NULL && fifo->head != NULL) || (fifo->tail != NULL && fifo->head == NULL)) {
         panic("Either the FIFO's head or tail is NULL, but not both.");
     }
 
-    node_t *node = (node_t *) malloc(sizeof(node_t));
+    node_t *node = (node_t *) kmalloc(sizeof(node_t));
     if(node == NULL) {
-        panic("Unable to allocate node_t in fifo_push_back");
+        panic("Unable to allocate node_t in pt_fifo_push_back");
     }
     node->pt_index = pt_index;
     node->next = NULL;
@@ -49,12 +50,12 @@ void fifo_push_back(pt_fifo_t *fifo, int pt_index) {
     }
 }
 
-int fifo_pop_front(pt_fifo_t *fifo) {
+int pt_fifo_pop_front(pt_fifo_t *fifo) {
     int retval;
     node_t *temp;
 
     if(fifo == NULL) {
-        panic("FIFO is NULL in fifo_pop_front");
+        panic("FIFO is NULL in pt_fifo_pop_front");
     }
 
     if(fifo->head == NULL) {
@@ -68,7 +69,7 @@ int fifo_pop_front(pt_fifo_t *fifo) {
         /* Only one node in queue */
         if(fifo->head->next == NULL) {
             if(fifo->tail != fifo->head) {
-                panic("pt_fifo's head has no successor, but tail != head (fifo_pop_front)");
+                panic("pt_fifo's head has no successor, but tail != head (pt_fifo_pop_front)");
             }
             fifo->head = NULL;
             fifo->tail = NULL;
@@ -78,17 +79,17 @@ int fifo_pop_front(pt_fifo_t *fifo) {
             fifo->head->next->prev = NULL;
             fifo->head = fifo->head->next;
         }
-        free(temp);
+        kfree(temp);
     }
 
     return retval;
 }
 
-void fifo_pop(pt_fifo_t *fifo, int pt_index) {
+void pt_fifo_pop(pt_fifo_t *fifo, int pt_index) {
     node_t *temp = NULL;
 
     if(fifo == NULL) {
-        panic("FIFO is NULL in fifo_pop");
+        panic("FIFO is NULL in pt_fifo_pop");
     }
     if((fifo->tail == NULL && fifo->head != NULL) || (fifo->tail != NULL && fifo->head == NULL)) {
         panic("Either the FIFO's head or tail is NULL, but not both.");
@@ -126,16 +127,16 @@ void fifo_pop(pt_fifo_t *fifo, int pt_index) {
     }
 
     if(temp == NULL) {
-        panic("Searched pt_index not found in fifo queue (fifo_pop)");
+        panic("Searched pt_index not found in fifo queue (pt_fifo_pop)");
     }
-    free(temp);
+    kfree(temp);
 }
 
-void fifo_free(pt_fifo_t *fifo) {
+void pt_fifo_free(pt_fifo_t *fifo) {
     node_t *curr, *temp;
 
     if(fifo == NULL) {
-        panic("FIFO is NULL in fifo_pop");
+        panic("FIFO is NULL in pt_fifo_pop");
     }
     if((fifo->tail == NULL && fifo->head != NULL) || (fifo->tail != NULL && fifo->head == NULL)) {
         panic("Either the FIFO's head or tail is NULL, but not both.");
@@ -143,7 +144,7 @@ void fifo_free(pt_fifo_t *fifo) {
 
     if (fifo->head == fifo->tail) {
         if(fifo->head != NULL) {
-            free(fifo->head);
+            kfree(fifo->head);
         }
     }
     else {
@@ -151,9 +152,9 @@ void fifo_free(pt_fifo_t *fifo) {
         /* Tail inaccessible from now on */
         while (curr != NULL) {
             temp = curr->prev;
-            free(curr);
+            kfree(curr);
             curr = temp;
         }
     }
-    free(fifo);
+    kfree(fifo);
 }

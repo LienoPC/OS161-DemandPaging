@@ -46,6 +46,7 @@
 #include <swapfile.h>
 #include <coremap.h>
 #include <pt.h>
+#include <pt_fifo.h>
 #include <kern/fcntl.h>
 
 
@@ -641,6 +642,7 @@ as_initialize_pt(struct addrspace *as){
 	if (as->control_bits == NULL) {
 		panic("Problem in creating page table");
 	}
+	as->page_queue = pt_fifo_init();
 	for(i = 0; i < as->n_entry; i++){
 		as->control_bits[i] = 0;
 	}
@@ -694,17 +696,23 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 
 int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
-{
-	as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
-	as->segs.as_stackvtop = USERSTACK;
+{	
+	#if OPT_PAGING
+		as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
+		as->segs.as_stackvtop = USERSTACK;
 
-	if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
-		/* Already defined the other regions, I can map the stack in the PT */
-		as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
-	}
+		if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
+			/* Already defined the other regions, I can map the stack in the PT */
+			as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
+		}
 
-	/* Initial user-level stack pointer */
-	*stackptr = as->segs.as_stackvtop;
+		/* Initial user-level stack pointer */
+		*stackptr = as->segs.as_stackvtop;
+	#else
+		KASSERT(as->as_stackpbase != 0);
+
+		*stackptr = USERSTACK;
+	#endif
 
 	return 0;
 }

@@ -74,8 +74,9 @@ struct addrspace {
         unsigned char *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
         int n_entry;
         int last_c_freed;
-        struct vnode *swapfile; // Swapfile vnode 
-        struct segments segs;  // Elf header segments
+        struct vnode *swapfile;      // Swapfile vnode 
+        struct segments segs;        // Elf header segments
+        pt_fifo_t *page_queue;       // FIFO queue to track mapped pages (used for page replacement) 
 
 #endif
 };
@@ -124,42 +125,39 @@ struct addrspace {
  *    pt_pagefault - resolves a page fault
  */
 
-struct addrspace *as_create(void);
-int               as_copy(struct addrspace *src, struct addrspace **ret);
-void              as_activate(void);
-void              as_deactivate(void);
-void              as_destroy(struct addrspace *);
+struct addrspace  *as_create       (void);
+int                as_copy         (struct addrspace *src, struct addrspace **ret);
+void               as_activate     (void);
+void               as_deactivate   (void);
+void               as_destroy      (struct addrspace *);
+int                as_prepare_load (struct addrspace *as);
+int                as_complete_load(struct addrspace *as);
+int                as_define_stack (struct addrspace *as, vaddr_t *initstackptr);
+
 #if OPT_PAGING
-int               as_define_region(struct addrspace *as,
-                                   vaddr_t vaddr, size_t sz,
-                                   Elf_Phdr ph,
-                                   int readable,
-                                   int writeable,
-                                   int executable); 
-
-void               as_set_progelf (struct addrspace *as, struct vnode *elf);
-int                as_set_swapfile(struct addrspace *as, char *path);       
+int                as_define_region(struct addrspace *as,
+                                    vaddr_t vaddr, size_t sz,
+                                    Elf_Phdr ph,
+                                    int readable,
+                                    int writeable,
+                                    int executable); 
+paddr_t            pt_getframe     (vaddr_t addr);
+paddr_t            pt_pagefault    (vaddr_t addr);
+int                pt_pageout      (int index);
+void               as_initialize_pt(struct addrspace *as);
+void               as_set_progelf  (struct addrspace *as, struct vnode *elf);
+int                as_set_swapfile (struct addrspace *as, char *path);       
 #else
-int               as_define_region(struct addrspace *as,
-                                   vaddr_t vaddr, size_t sz,
-                                   int readable,
-                                   int writeable,
-                                   int executable);
+int               as_define_region (struct addrspace *as,
+                                    vaddr_t vaddr, size_t sz,
+                                    int readable,
+                                    int writeable,
+                                    int executable);
 #endif
-
-int               as_prepare_load(struct addrspace *as);
-int               as_complete_load(struct addrspace *as);
-int               as_define_stack(struct addrspace *as, vaddr_t *initstackptr);
-
-paddr_t                 pt_getframe(vaddr_t addr);
-paddr_t                 pt_pagefault(vaddr_t addr);
-int                     pt_pageout(int index);
-void                    as_initialize_pt(struct addrspace *as);
 
 /*
         Fuctions in segments.c
 */
-
 int
 load_from_elf(struct addrspace *as, paddr_t paddr, off_t offset);
 
@@ -171,7 +169,6 @@ load_from_elf(struct addrspace *as, paddr_t paddr, off_t offset);
  */
 
 int load_elf(struct vnode *v, vaddr_t *entrypoint);
-
 
 
 #endif /* _ADDRSPACE_H_ */
