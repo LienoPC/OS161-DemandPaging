@@ -4,6 +4,7 @@
 #include <opt-paging.h>
 
 void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly);
-
+void tlb_invalid_entry(vaddr_t vaddr);
+void tlb_invalid(void);
 
 #endif

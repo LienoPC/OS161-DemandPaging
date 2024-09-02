@@ -143,7 +143,7 @@ int                as_define_region(struct addrspace *as,
                                     int writeable,
                                     int executable); 
 paddr_t            pt_getframe     (vaddr_t addr);
-paddr_t            pt_pagefault    (vaddr_t addr);
+paddr_t            pt_pagefault    (int index);
 int                pt_pageout      (int index);
 void               as_initialize_pt(struct addrspace *as);
 void               as_set_progelf  (struct addrspace *as, struct vnode *elf);

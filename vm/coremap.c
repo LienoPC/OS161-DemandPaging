@@ -221,13 +221,19 @@ releaseframe(paddr_t p_addr){
 
 
 void
-releasecontiguousalloc(paddr_t p_addr, int npages){
+releasecontiguousalloc(paddr_t p_addr){
     int f_number, i;
     f_number = p_addr/PAGE_SIZE;
-    KASSERT(f_number > 0 && f_number + npages < coremap->nRamFrames);
+
+    KASSERT(f_number > 0 && f_number < coremap->nRamFrames);
+
+    /* Zeroing the freed frames */
+    bzero((void *) PADDR_TO_KVADDR(p_addr), PAGE_SIZE*coremap->allocSize[f_number]);
+
+    /* Set as freed all contiguous frames */
     spinlock_acquire(&coremap->coremap_lock);
-    for(i = f_number; i < f_number + npages; i++){
-        coremap->bitmap[f_number] = (unsigned char) 1;
+    for(i = f_number; i < f_number + coremap->allocSize[f_number]; i++){
+        coremap->bitmap[i] = (unsigned char) 1;       
     }
     coremap->allocSize[f_number] = 0;
     spinlock_release(&coremap->coremap_lock);

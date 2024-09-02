@@ -30,7 +30,7 @@ paddr_t         stealcontinuousalloc(int npages, paddr_t first);
 
 void            releaseframe(paddr_t f_addr);
 
-void            releasecontiguousalloc(paddr_t p_addr, int npages);
+void            releasecontiguousalloc(paddr_t p_addr);
 
 
 #endif

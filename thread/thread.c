@@ -825,6 +825,23 @@ schedule(void)
 	 * You can write this. If we do nothing, threads will run in
 	 * round-robin fashion.
 	 */
+
+	#if !OPT_PAGING
+	spinlock_acquire(&curcpu->c_runqueue_lock);
+	struct thread *nextthread = threadlist_remhead(&curcpu->c_runqueue);
+	struct thread *currentthread = curthread;
+
+	if(nextthread != currentthread && nextthread != 0){
+		threadlist_addhead(&curcpu->c_runqueue, nextthread);
+		spinlock_release(&curcpu->c_runqueue_lock);
+
+		thread_yield();
+	} 
+	if (spinlock_do_i_hold(&curcpu->c_runqueue_lock)){
+		spinlock_release(&curcpu->c_runqueue_lock);
+	}
+
+	#endif
 }
 
 /*

@@ -80,7 +80,8 @@ get_elf_offset(struct addrspace *as, vaddr_t vaddr);
 static void
 pt_read_from_swap(vaddr_t vaddr, paddr_t paddr);
 
-
+static vaddr_t
+get_vaddr_from_index(struct addrspace *as, int index);
 
 /*
 	Translate the vaddr to the page addr in the pt
@@ -92,7 +93,7 @@ get_pt_index(struct addrspace *as, vaddr_t vaddr){
 		index = (vaddr - as->segs.as_vbase1)/PAGE_SIZE;
 	}
 	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
-		index = (vaddr - as->segs.as_vbase2 + (as->segs.as_npages1*PAGE_SIZE))/PAGE_SIZE;
+		index = (vaddr - as->segs.as_vbase2)/PAGE_SIZE + as->segs.as_npages1;
 	}else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
 		index = (as->segs.as_stackptbase + (as->segs.as_stackvtop - vaddr))/PAGE_SIZE;
 	}else{
@@ -100,6 +101,23 @@ get_pt_index(struct addrspace *as, vaddr_t vaddr){
 		index = -1;
 	}
 	return index;
+}
+
+
+/*
+	Translate the vaddr to the page addr in the pt
+*/
+static vaddr_t
+get_vaddr_from_index(struct addrspace *as, int index){
+	vaddr_t vaddr=(vaddr_t)NULL;
+	if (index >= 0 && index < (int)as->segs.as_npages1){
+		vaddr = (index*PAGE_SIZE) + as->segs.as_vbase1;
+	}else if((size_t)index > as->segs.as_npages1 && (size_t)index < (as->segs.as_npages1 + as->segs.as_npages2)){
+		vaddr = ((index-as->segs.as_npages1)*PAGE_SIZE) + as->segs.as_vbase2;
+	}else if((size_t)index > as->segs.as_npages1 + as->segs.as_npages2 && (size_t)index < as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES){
+		vaddr = as->segs.as_stackptbase + as->segs.as_stackvtop - index*PAGE_SIZE; 
+	}
+	return vaddr;
 }
 
 /*
@@ -111,11 +129,11 @@ get_elf_offset(struct addrspace *as, vaddr_t vaddr){
 	/* Compute virtual page address offset in the file */
 	if (vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
 		offset = (vaddr - as->segs.as_vbase1) + as->segs.text_ph.p_offset;
-		KASSERT((offset & PAGE_FRAME) == offset);
+		//KASSERT((offset & PAGE_FRAME) == offset);
 	}
 	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
 		offset = (vaddr - as->segs.as_vbase2) + as->segs.data_ph.p_offset;
-		KASSERT((offset & PAGE_FRAME) == offset);
+		//KASSERT((offset & PAGE_FRAME) == offset);
 	}
 	else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
 		offset = (off_t) -1;
@@ -244,9 +262,7 @@ alloc_kpages(unsigned npages)
 
 void 
 free_kpages(vaddr_t addr){
-(void) addr;
-(void) stealmem_lock;
-	
+	releasecontiguousalloc(KVADDR_TO_PADDR(addr));
 }
 
 void
@@ -378,25 +394,25 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 paddr_t
 pt_getframe(vaddr_t addr){
 	paddr_t paddr = (paddr_t)NULL;
-	int i;
+	int index;
 	struct addrspace *as;
 	as = proc_getas();
 
 	KASSERT((addr & PAGE_FRAME) == addr);
 
 	/* Get the index of the PT */
-	i = get_pt_index(as, addr);
+	index = get_pt_index(as, addr);
 	/* Verify if the entry is valid */
-	if (as->control_bits[i] & PT_VALID_BIT){
+	if (as->control_bits[index] & PT_VALID_BIT){
 		/* Page is in memory, return the physical frame */
-		paddr = as->frames[i];
+		paddr = as->frames[index];
 	}else{
 		/* PAGE FAULT: frame not in memory */
-		paddr = pt_pagefault(addr);
+		paddr = pt_pagefault(index);
 		/* update the PT */
-		as->frames[i] = paddr;
+		as->frames[index] = paddr;
 		/* now the pt entry is valid */ 
-		as->control_bits[i] |= PT_VALID_BIT;
+		as->control_bits[index] |= PT_VALID_BIT;
 		
 
 	}
@@ -410,11 +426,9 @@ pt_getframe(vaddr_t addr){
 	Tries to take a frame from memory and reads from the elf/swap file basing
 	on the swap bit of the entry
 */
-
 paddr_t
-pt_pagefault(vaddr_t addr){
+pt_pagefault(int index){
 	paddr_t paddr = (paddr_t)NULL;
-	int index;
 	off_t offset = (off_t) 0;
 	struct addrspace *as;
 	as = proc_getas();
@@ -426,13 +440,12 @@ pt_pagefault(vaddr_t addr){
 	}else{
 		/* Zeroing the frame */
 		as_zero_region(paddr,1);
-		index = get_pt_index(as, addr);
 		if (as->control_bits[index] & PT_SWAP_BIT){
-			pt_read_from_swap(index*PAGE_SIZE, paddr);
+			pt_read_from_swap(get_vaddr_from_index(as,index), paddr);
 		}else{
 			/* Compute the offset in the elf file of the page we want to read*/
 			/* If the address is stack (not in the swap file), allocate an empty frame */
-			offset = get_elf_offset(as, addr);
+			offset = get_elf_offset(as, get_vaddr_from_index(as,index));
 			if (offset != (off_t)-1){
 				/* Read the page from the elf file */
 				if (load_from_elf(as, paddr, offset)){
@@ -451,12 +464,11 @@ pt_pagefault(vaddr_t addr){
 /* 	
 	Executes the page-out of a page in the PT 
 
-	-Invalid the entry 
+	-Invalid entry in the PT
 	-Verify the swap bit and swap-out the page
 	-Zero the pframe
-
+	-Invalid entry in the TLB
 */
-
 int
 pt_pageout(int index){	
 	struct addrspace *as;
@@ -466,21 +478,21 @@ pt_pageout(int index){
 	
 	if (as->control_bits[index] & PT_SWAP_BIT || as->control_bits[index] & PT_DIRTY_BIT){
 		/* This page works on the swap file */
-		sf_pageout(index*PAGE_SIZE, as->frames[index], -1);
+		sf_pageout(get_vaddr_from_index(as,index), as->frames[index], -1);
 		/* Set the swap bit if the swap-out is executed on dirty bit */
 		if (!(as->control_bits[index] & PT_SWAP_BIT)){
 			as->control_bits[index] |= PT_SWAP_BIT; 
 		}
 	}
-
+	/* Invalid the TLB entry on page out */
+	tlb_invalid_entry(get_vaddr_from_index(as, index));
 	as_zero_region(as->frames[index], 1);
 	return 0;
 }
 
 /*
-	CREATE THE PAGE TABLE AND SEGMENTS STRUCT OF A PROCESS
+	Creates the address space structure for a process
 */
-
 struct addrspace *
 as_create(void)
 {
@@ -490,16 +502,17 @@ as_create(void)
 	if (as == NULL) {
 		return NULL;
 	}
-
-
+	bzero(as, sizeof(struct addrspace));
 	/* 	We initialize the page table only after defining regions
 		(and knowing the dimension of the virtual memory)
 	*/
-	
 	return as;
 }
 
-
+/*
+	Destroy the address space of a process, releasing the occupied frames
+	and deallocating the as structure
+*/
 void
 as_destroy(struct addrspace *as)
 {
@@ -513,7 +526,13 @@ as_destroy(struct addrspace *as)
 			releaseframe(as->frames[i]);
 		}
 	}
-
+	as->segs.as_npages1 = 0;
+	as->segs.as_npages2 = 0;
+	as->segs.as_vbase1 = 0;
+	as->segs.as_vbase2 = 0;
+	as->segs.as_stackptbase = 0;
+	as->segs.as_stackvbase = 0;
+	as->segs.as_stackvtop = 0;
 	/*
 		Destroy all addrspace structures (page table and segments)
 	*/
@@ -530,7 +549,6 @@ as_destroy(struct addrspace *as)
 void
 as_activate(void)
 {
-	int i, spl;
 	struct addrspace *as;
 
 	as = proc_getas();
@@ -541,14 +559,8 @@ as_activate(void)
 		 */
 		return;
 	}
-	/* Disable interrupts on this CPU while frobbing the TLB. */
-	spl = splhigh();
-
-	for (i=0; i<NUM_TLB; i++) {
-		tlb_write(TLBHI_INVALID(i), TLBLO_INVALID(), i);
-	}
-
-	splx(spl);
+	/* Invalid the TLB on context switch */
+	tlb_invalid();
 }
 
 void
@@ -636,6 +648,9 @@ as_initialize_pt(struct addrspace *as){
 
 	as->n_entry = as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES;
 	as->frames = kmalloc(as->n_entry*sizeof(paddr_t));
+	for(i = 0; i < as->n_entry; i++){
+		as->frames[i] = (paddr_t)0;
+	}
 	if (as->frames == NULL){
 		panic("Problem in creating page table");
 	}
