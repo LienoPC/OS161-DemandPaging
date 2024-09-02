@@ -9,4 +9,6 @@ syscall.o: ../../arch/mips/syscall/syscall.c ../../include/types.h \
  includelinks/machine/thread.h ../../include/setjmp.h \
  includelinks/kern/machine/setjmp.h ../../include/addrspace.h \
  ../../include/vm.h includelinks/machine/vm.h opt-paging.h \
- ../../include/syscall.h opt-syscalls.h opt-fork.h
+ ../../include/vnode.h ../../include/elf.h includelinks/machine/elf.h \
+ ../../include/segments.h ../../include/pt_fifo.h ../../include/syscall.h \
+ opt-syscalls.h opt-fork.h

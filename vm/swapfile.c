@@ -1,4 +1,6 @@
 #include <types.h>
+#include <lib.h>
+#include <vm.h> 
 #include <kern/fcntl.h>
 #include <vfs.h>
 #include <vnode.h>
@@ -143,7 +145,7 @@ void sf_pageout(vaddr_t vaddr, paddr_t paddr, off_t offset) {
     }
 }
 
-void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, paddr_t dst_paddr) {
+void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr) {
     /* 
      * We don't panic here because free swap space availability should be
      * verified before writes that make the swap file grow in size (basically appending).
@@ -194,12 +196,15 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
 
     /* Page out of the victim */
     sf_pageout(vic_vaddr, vic_paddr, page_offset);
+    
+    /* Zero-fill the destination (victim) frame */
+    bzero((void *)PADDR_TO_KVADDR(vic_paddr), PAGE_SIZE);
 
     /* Copy the content of the buffer in the destination frame */
-    memmove((void *) PADDR_TO_KVADDR(dst_paddr), (const void *) &buf, sizeof(buf));
+    memmove((void *) PADDR_TO_KVADDR(vic_paddr), (const void *) &buf, sizeof(buf));
 
     /*
-    uint8_t *ptr = (uint8_t *) dst_paddr;
+    uint8_t *ptr = (uint8_t *) vic_paddr;
     for (size_t i = 0; i < PAGE_SIZE; i++) {
         ptr[i] = buf[i];
     }
