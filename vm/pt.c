@@ -115,9 +115,9 @@ get_vaddr_from_index(struct addrspace *as, int index){
 	vaddr_t vaddr=(vaddr_t)NULL;
 	if (index >= 0 && index < (int)as->segs.as_npages1){
 		vaddr = (index*PAGE_SIZE) + as->segs.as_vbase1;
-	}else if((size_t)index > as->segs.as_npages1 && (size_t)index < (as->segs.as_npages1 + as->segs.as_npages2)){
+	}else if((size_t)index >= as->segs.as_npages1 && (size_t)index < (as->segs.as_npages1 + as->segs.as_npages2)){
 		vaddr = ((index-as->segs.as_npages1)*PAGE_SIZE) + as->segs.as_vbase2;
-	}else if((size_t)index > as->segs.as_npages1 + as->segs.as_npages2 && (size_t)index < as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES){
+	}else if((size_t)index >= as->segs.as_npages1 + as->segs.as_npages2 && (size_t)index < as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES){
 		vaddr = as->segs.as_stackptbase + as->segs.as_stackvtop - index*PAGE_SIZE; 
 	}
 	return vaddr;
@@ -219,7 +219,7 @@ pt_page_replacement(int dst_index) {
 
 	as->control_bits[victim_index] &= ~PT_VALID_BIT;
 	if(!(as->control_bits[victim_index] & PT_SWAP_BIT)) {
-		as->control_bits[victim_index] &= PT_SWAP_BIT;
+		as->control_bits[victim_index] |= PT_SWAP_BIT;
 	}
 	tlb_invalid_entry(victim_vaddr);
 

@@ -3,7 +3,7 @@
 
 #include <opt-paging.h>
 
-#define MAX_SWAP_SPACE 9*1024*1024 /* 9MB of swap space*/
+#define MAX_SWAP_SPACE 9*1024*1024 /* 32MB of swap space*/
 
 bool  is_sf_full      (void);
 bool  sf_can_fit_page (void);
