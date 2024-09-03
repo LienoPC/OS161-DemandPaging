@@ -1,4 +1,6 @@
 #include <types.h>
+#include <lib.h>
+#include <vm.h> 
 #include <kern/fcntl.h>
 #include <vfs.h>
 #include <vnode.h>
@@ -82,14 +84,14 @@ int sf_pagein(vaddr_t vaddr, paddr_t paddr) {
             break;
         }
 
-        header_ku.uio_offset += (PAGE_SIZE + sizeof(header));
+        uio_kinit(&header_iov, &header_ku, &header, sizeof(header), (off_t) (header_ku.uio_offset + PAGE_SIZE), UIO_READ);
     }
 
     if (header != vaddr) {
         return -2;
     }
 
-    uio_kinit(&data_iov, &data_ku, (void *) PADDR_TO_KVADDR(paddr), PAGE_SIZE, (off_t) header_ku.uio_offset + sizeof(header), UIO_READ);
+    uio_kinit(&data_iov, &data_ku, (void *) PADDR_TO_KVADDR(paddr), PAGE_SIZE, (off_t) header_ku.uio_offset, UIO_READ);
     if (VOP_READ(as->swapfile, &data_ku)) {
         panic("Error during the second VOP_READ in sf_pagein");
     }
@@ -143,7 +145,7 @@ void sf_pageout(vaddr_t vaddr, paddr_t paddr, off_t offset) {
     }
 }
 
-void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, paddr_t dst_paddr) {
+void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr) {
     /* 
      * We don't panic here because free swap space availability should be
      * verified before writes that make the swap file grow in size (basically appending).
@@ -179,7 +181,7 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
             break;
         }
 
-        header_ku.uio_offset += (PAGE_SIZE + sizeof(header));
+        uio_kinit(&header_iov, &header_ku, &header, sizeof(header), (off_t) (header_ku.uio_offset + PAGE_SIZE), UIO_READ);
     }
 
     /* A match must be found, otherwise the replacement shouldn't have started */
@@ -187,19 +189,22 @@ void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr, pad
     page_offset = (off_t) header_ku.uio_offset;
 
     /* Read the page from the swap file and store it in a buffer */
-    uio_kinit(&data_iov, &data_ku, &buf, PAGE_SIZE, page_offset + sizeof(header), UIO_READ);
+    uio_kinit(&data_iov, &data_ku, &buf, PAGE_SIZE, page_offset, UIO_READ);
     if (VOP_READ(as->swapfile, &data_ku)) {
         panic("Error during the second VOP_READ in sf_replacepage");
     }
 
     /* Page out of the victim */
-    sf_pageout(vic_vaddr, vic_paddr, page_offset);
+    sf_pageout(vic_vaddr, vic_paddr, page_offset - sizeof(header));
+    
+    /* Zero-fill the destination (victim) frame */
+    bzero((void *)PADDR_TO_KVADDR(vic_paddr), PAGE_SIZE);
 
     /* Copy the content of the buffer in the destination frame */
-    memmove((void *) PADDR_TO_KVADDR(dst_paddr), (const void *) &buf, sizeof(buf));
+    memmove((void *) PADDR_TO_KVADDR(vic_paddr), (const void *) &buf, sizeof(buf));
 
     /*
-    uint8_t *ptr = (uint8_t *) dst_paddr;
+    uint8_t *ptr = (uint8_t *) vic_paddr;
     for (size_t i = 0; i < PAGE_SIZE; i++) {
         ptr[i] = buf[i];
     }

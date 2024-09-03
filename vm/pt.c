@@ -67,8 +67,8 @@ static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 *
 */
 
-static
-void
+/* Static functions declaration */
+static void
 as_zero_region(paddr_t paddr, unsigned npages);
 
 static int
@@ -82,6 +82,9 @@ pt_read_from_swap(vaddr_t vaddr, paddr_t paddr);
 
 static vaddr_t
 get_vaddr_from_index(struct addrspace *as, int index);
+
+static paddr_t
+pt_page_replacement(int dst_index);
 
 /*
 	Translate the vaddr to the page addr in the pt
@@ -112,9 +115,9 @@ get_vaddr_from_index(struct addrspace *as, int index){
 	vaddr_t vaddr=(vaddr_t)NULL;
 	if (index >= 0 && index < (int)as->segs.as_npages1){
 		vaddr = (index*PAGE_SIZE) + as->segs.as_vbase1;
-	}else if((size_t)index > as->segs.as_npages1 && (size_t)index < (as->segs.as_npages1 + as->segs.as_npages2)){
+	}else if((size_t)index >= as->segs.as_npages1 && (size_t)index < (as->segs.as_npages1 + as->segs.as_npages2)){
 		vaddr = ((index-as->segs.as_npages1)*PAGE_SIZE) + as->segs.as_vbase2;
-	}else if((size_t)index > as->segs.as_npages1 + as->segs.as_npages2 && (size_t)index < as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES){
+	}else if((size_t)index >= as->segs.as_npages1 + as->segs.as_npages2 && (size_t)index < as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES){
 		vaddr = as->segs.as_stackptbase + as->segs.as_stackvtop - index*PAGE_SIZE; 
 	}
 	return vaddr;
@@ -177,6 +180,76 @@ pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
 		}			
 
 }
+
+/* 
+ * Handles page replacement.
+ * When it returns, the PT won't be in a consistent state, as
+ * a few other operations in pt_get_frame are needed to update it.
+ */
+static paddr_t
+pt_page_replacement(int dst_index) {
+	int victim_index;
+	vaddr_t victim_vaddr, dst_vaddr;
+	paddr_t victim_paddr;
+	struct addrspace *as;
+	off_t elf_offset;
+
+	/*
+	* dst_index is the PT index of the page to which a newly
+	* allocated frame will be mapped. 
+	* Since we are using a FIFO approach for page replacement,
+	* there's no need to explicitly pass the index of the victim:
+	* it will simply be pooped from the head of the FIFO queue.
+	*/	
+
+	as = proc_getas();
+	victim_index = pt_fifo_pop_front(as->page_queue);
+
+	/* 
+	 * Since the FIFO queue is used to track mapped pages, 
+	 * there has to be at least one to start page replacement.
+	 */
+	if(victim_index < 0) {
+		panic("Out of memory");
+	}
+
+	victim_vaddr = get_vaddr_from_index(as, victim_index);
+	victim_paddr = as->frames[victim_index];
+	dst_vaddr = get_vaddr_from_index(as, dst_index); 
+
+	as->control_bits[victim_index] &= ~PT_VALID_BIT;
+	if(!(as->control_bits[victim_index] & PT_SWAP_BIT)) {
+		as->control_bits[victim_index] |= PT_SWAP_BIT;
+	}
+	tlb_invalid_entry(victim_vaddr);
+
+	if(as->control_bits[dst_index] & PT_SWAP_BIT) {
+		/* The page has been written on the swap file */
+		sf_replacepage(victim_vaddr, dst_vaddr, victim_paddr);
+	}
+	else {
+		/* Need to load the page from the elf file */
+
+		sf_pageout(victim_vaddr, victim_paddr, -1);
+		as_zero_region(victim_paddr, 1);
+		/* 
+		 * Compute the offset in the elf file of the page we want to read
+		 * If the address is stack (not in the swap file), allocate an empty frame 
+		 */
+		elf_offset = get_elf_offset(as, get_vaddr_from_index(as, dst_index));
+		if (elf_offset != (off_t)-1){
+			/* Read the page from the elf file */
+			if (load_from_elf(as, victim_paddr, elf_offset)){
+				panic("Error during the load of a page from the elf file");
+			}
+		}else{
+			/* If is the first access to a stack page (hopefully write), we set the swap bit on the entry */
+			as->control_bits[dst_index] |= PT_SWAP_BIT;
+		}
+	}
+
+	return victim_paddr;
+} 
 
 
 void
@@ -413,11 +486,9 @@ pt_getframe(vaddr_t addr){
 		as->frames[index] = paddr;
 		/* now the pt entry is valid */ 
 		as->control_bits[index] |= PT_VALID_BIT;
-		
-
+		pt_fifo_push_back(as->page_queue, index);
 	}
 	return paddr;
-
 }
 
 /* 
@@ -436,8 +507,8 @@ pt_pagefault(int index){
 	/* First get the physical frame and then start the page replacement if there are no available frames */
 	paddr = getfreeframe();
 	if (paddr == (paddr_t) NULL){
-		/* Page Replacement */
-		kprintf("Page replacement");
+		/* Start page replacement */
+		paddr = pt_page_replacement(index);
 	}else{
 		/* Zeroing the frame */
 		as_zero_region(paddr,1);
@@ -469,25 +540,26 @@ pt_pagefault(int index){
 	-Verify the swap bit and swap-out the page
 	-Zero the pframe
 	-Invalid entry in the TLB
+	-Pop the page index from the fifo queue
 */
 int
 pt_pageout(int index){	
 	struct addrspace *as;
 	as = proc_getas();
 
+	KASSERT(as->control_bits[index] & PT_VALID_BIT);
 	as->control_bits[index] &= ~(PT_VALID_BIT);
 	
-	if (as->control_bits[index] & PT_SWAP_BIT || as->control_bits[index] & PT_DIRTY_BIT){
-		/* This page works on the swap file */
-		sf_pageout(get_vaddr_from_index(as,index), as->frames[index], -1);
-		/* Set the swap bit if the swap-out is executed on dirty bit */
-		if (!(as->control_bits[index] & PT_SWAP_BIT)){
-			as->control_bits[index] |= PT_SWAP_BIT; 
-		}
+	sf_pageout(get_vaddr_from_index(as,index), as->frames[index], -1);
+	/* Set the swap bit */
+	if (!(as->control_bits[index] & PT_SWAP_BIT)){
+		as->control_bits[index] |= PT_SWAP_BIT; 
 	}
+
 	/* Invalid the TLB entry on page out */
 	tlb_invalid_entry(get_vaddr_from_index(as, index));
 	as_zero_region(as->frames[index], 1);
+	pt_fifo_pop(as->page_queue, index);
 	return 0;
 }
 
