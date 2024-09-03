@@ -101,6 +101,7 @@ paddr_t getfreeframe() {
     if (found == -1){
         addr = (paddr_t) NULL;
     }else{
+        coremap->last_frame = found;
         addr = (paddr_t) found*PAGE_SIZE;
     }
     return addr;

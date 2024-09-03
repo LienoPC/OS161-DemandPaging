@@ -437,6 +437,7 @@ pt_pagefault(int index){
 	paddr = getfreeframe();
 	if (paddr == (paddr_t) NULL){
 		/* Page Replacement */
+		kprintf("Page replacement");
 	}else{
 		/* Zeroing the frame */
 		as_zero_region(paddr,1);
