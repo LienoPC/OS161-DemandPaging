@@ -239,3 +239,14 @@ releasecontiguousalloc(paddr_t p_addr){
     spinlock_release(&coremap->coremap_lock);
     //andiamo
 }
+
+int get_occupied_frames(void) {
+    int i, cnt = 0;
+    for(i = 0; i < coremap->nRamFrames; i++) {
+        if(!coremap->bitmap[i]) {
+            cnt++;
+        }
+    }
+
+    return cnt;
+}
