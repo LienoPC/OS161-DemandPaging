@@ -35,7 +35,6 @@
 #include <spinlock.h>
 #include <proc.h>
 #include <current.h>
-#include <syscall.h>
 #include <mips/tlb.h>
 #include <elf.h>
 #include <vnode.h>
@@ -197,7 +196,7 @@ pt_page_replacement(int dst_index) {
 	* allocated frame will be mapped. 
 	* Since we are using a FIFO approach for page replacement,
 	* there's no need to explicitly pass the index of the victim:
-	* it will simply be popped from the head of the FIFO queue.
+	* it will simply be pooped from the head of the FIFO queue.
 	*/	
 
 	as = proc_getas();
@@ -367,7 +366,10 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	    case VM_FAULT_READONLY:
 		/* Text segment pages must be readonly, so this can happen */
 		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
-		sys__exit(VM_FAULT_READONLY);
+		proc_remthread(curthread);
+		proc_destroy(curproc);
+		thread_exit();
+		panic("thread_exit returned (should not happen)\n");
 		break;
 	    case VM_FAULT_READ:
 		DEBUG(DB_VM, "VM_FAULT_READ\n");
