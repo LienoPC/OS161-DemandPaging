@@ -826,7 +826,7 @@ schedule(void)
 	 * round-robin fashion.
 	 */
 
-	#if OPT_PAGING
+	#if !OPT_PAGING
 	spinlock_acquire(&curcpu->c_runqueue_lock);
 	struct thread *nextthread = threadlist_remhead(&curcpu->c_runqueue);
 	struct thread *currentthread = curthread;

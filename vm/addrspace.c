@@ -27,27 +27,12 @@
  * SUCH DAMAGE.
  */
 
-
 #include <types.h>
 #include <kern/errno.h>
 #include <lib.h>
-#include <spl.h>
-#include <cpu.h>
-#include <spinlock.h>
-#include <proc.h>
-#include <current.h>
-#include <mips/tlb.h>
-#include <elf.h>
-#include <vnode.h>
-#include <segments.h>
-#include <pt_fifo.h>
 #include <addrspace.h>
-#include <vm_tlb.h>
 #include <vm.h>
-#include <vfs.h>
-#include <swapfile.h>
-#include <coremap.h>
-#include <kern/fcntl.h>
+#include <proc.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -59,7 +44,6 @@
 #if OPT_DUMBVM
 
 #elif OPT_PAGING
-
 
 
 #endif

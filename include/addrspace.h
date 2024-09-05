@@ -39,8 +39,6 @@
 #define PT_VALID_BIT 0x4
 #define PT_SWAP_BIT 0x8
 
-#define PAGING_STACKPAGES    18
-
 //#include <types.h>
 #include <vm.h>
 #include <opt-paging.h>

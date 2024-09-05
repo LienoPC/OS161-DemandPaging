@@ -50,6 +50,9 @@
 #include <kern/fcntl.h>
 
 
+/* under dumbvm, always have 72k of user stack */
+/* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
+#define PAGING_STACKPAGES    18
 
 
 /*
@@ -558,7 +561,6 @@ pt_pageout(int index){
 	pt_fifo_pop(as->page_queue, index);
 	return 0;
 }
-
 
 /*
 	Creates the address space structure for a process
