@@ -48,11 +48,7 @@
 #include <coremap.h>
 #include <pt.h>
 #include <kern/fcntl.h>
-
-
-/* under dumbvm, always have 72k of user stack */
-/* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
-#define PAGING_STACKPAGES    18
+#include <vmstats.h>
 
 
 /*
@@ -60,6 +56,7 @@
  */
 static struct spinlock stealmem_lock = SPINLOCK_INITIALIZER;
 
+struct vmstats *stats;
 /*
 *
 *	Configure at boot the kernel memory allocation structure (call coremap to manage 
@@ -166,6 +163,7 @@ pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
 		{
 		case 0:
 			/* Everything alright */
+			stats->pf_from_swap++;
 			break;
 		case -1:
 			/* Everything alright */
@@ -247,7 +245,8 @@ pt_page_replacement(int dst_index) {
 			as->control_bits[dst_index] |= PT_SWAP_BIT;
 		}
 	}
-
+	// Page replacement always requires a swap out, count this as swapfile write
+	stats->swapfile_writes++;
 	return victim_paddr;
 } 
 
@@ -436,6 +435,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	
+	// Getting to this point the TLB fault is valid and we can count it
+	stats->tlb_faults++;
 
 	/* 
 	 * If faultaddress is already in memory, load the appropriate paddr in the TLB,
@@ -478,6 +479,8 @@ pt_getframe(vaddr_t addr){
 	if (as->control_bits[index] & PT_VALID_BIT){
 		/* Page is in memory, return the physical frame */
 		paddr = as->frames[index];
+		// Count this as a tlb reload
+		stats->tlb_reloads++;
 	}else{
 		/* PAGE FAULT: frame not in memory */
 		paddr = pt_pagefault(index);
@@ -513,6 +516,8 @@ pt_pagefault(int index){
 		as_zero_region(paddr,1);
 		if (as->control_bits[index] & PT_SWAP_BIT){
 			pt_read_from_swap(get_vaddr_from_index(as,index), paddr);
+			// Frame loaded from swap, count this as pf from disk and pf from swap
+			stats->pf_disk++;
 		}else{
 			/* Compute the offset in the elf file of the page we want to read*/
 			/* If the address is stack (not in the swap file), allocate an empty frame */
@@ -522,9 +527,14 @@ pt_pagefault(int index){
 				if (load_from_elf(as, paddr, offset)){
 					panic("Error during the load of a page from the elf file");
 				}
+				// Frame is loaded from the elf file, count as pf from disk and pf from elf
+				stats->pf_disk++;
+				stats->pf_from_elf++;
 			}else{
 				/* If is the first access to a stack page (hopefully write), we set the swap bit on the entry */
 				as->control_bits[index] |= PT_SWAP_BIT;
+				// Empty frame allocated, count this as a zeroed page fault
+				stats->pf_zeroed++;
 			}
 		}
 	} 
@@ -561,6 +571,7 @@ pt_pageout(int index){
 	pt_fifo_pop(as->page_queue, index);
 	return 0;
 }
+
 
 /*
 	Creates the address space structure for a process
@@ -633,6 +644,8 @@ as_activate(void)
 	}
 	/* Invalid the TLB on context switch */
 	tlb_invalid();
+    // Count the tlb invalidation
+    stats->tlb_invalidations++;
 }
 
 void

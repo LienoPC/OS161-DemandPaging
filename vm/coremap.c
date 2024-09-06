@@ -4,11 +4,10 @@
 #include <spinlock.h>
 #include <lib.h>
 #include <coremap.h>
+#include <vmstats.h>
 
 
 //#include <current.h>
-
-
 
 
 
@@ -16,6 +15,22 @@ static int bootstrap_completed = 0; // Check if the coremap is active and choose
 static struct spinlock bootstrap_lock = SPINLOCK_INITIALIZER;
 static struct coremap_t *coremap;
 
+extern struct vmstats *stats;
+
+static void initialize_vmstats(){
+    // Initialize vmstats struct
+    stats = kmalloc(sizeof(struct vmstats));
+    stats->pf_disk = 0;
+    stats->pf_from_elf = 0;
+    stats->pf_from_swap = 0;
+    stats->pf_zeroed = 0;
+    stats->swapfile_writes = 0;
+    stats->tlb_faults = 0;
+    stats->tlb_faults_with_free = 0;
+    stats->tlb_faults_with_replace = 0;
+    stats->tlb_invalidations = 0;
+    stats->tlb_reloads = 0;
+}
 
 int
 isCoremapActive(){
@@ -69,6 +84,8 @@ coremap_bootstrap(void){
     spinlock_acquire(&bootstrap_lock);
     bootstrap_completed = 1;
     spinlock_release(&bootstrap_lock);
+
+    initialize_vmstats();
 
 }
 
