@@ -5,6 +5,8 @@
 #include <spinlock.h>
 #include <vm.h>
 #include <vm_tlb.h>
+#include <vmstats.h>
+
 
 static uint32_t tlb_findfree(void); 
 static uint32_t tlb_get_rr_victim(void);    
@@ -80,7 +82,12 @@ void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 	
 
 	if (index == NUM_TLB) {
+		// Count this fault as TLB miss with replacement
+		increase_tlb_faults_with_replace();
 		index = tlb_get_rr_victim();
+	}else{
+		// Count this fault as TLB miss with free
+		increase_tlb_faults_with_free();
 	}
 	
 	ehi = vaddr & TLBHI_VPAGE;
@@ -151,5 +158,4 @@ void tlb_invalid(){
 	splx(spl);
 	spinlock_release(&tlb_lock);
 }
-
 

@@ -13,4 +13,4 @@ pt.o: ../../vm/pt.c ../../include/types.h ../../include/kern/types.h \
  ../../include/segments.h opt-paging.h ../../include/pt_fifo.h \
  ../../include/addrspace.h ../../include/vm.h ../../include/vm_tlb.h \
  ../../include/vfs.h ../../include/swapfile.h ../../include/coremap.h \
- ../../include/pt.h ../../include/kern/fcntl.h
+ ../../include/pt.h ../../include/kern/fcntl.h ../../include/vmstats.h

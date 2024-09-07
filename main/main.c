@@ -49,6 +49,7 @@
 #include <syscall.h>
 #include <test.h>
 #include <version.h>
+#include <vmstats.h>
 #include <pt.h>
 #include "autoconf.h"  // for pseudoconfig
 #include "opt-hello.h"
@@ -67,6 +68,7 @@
  */
 extern const int buildversion;
 extern const char buildconfig[];
+
 
 /*
  * Copyright message for the OS/161 base code.
@@ -153,7 +155,7 @@ shutdown(void)
 {
 
 	kprintf("Shutting down.\n");
-
+	print_statistics();
 	vfs_clearbootfs();
 	vfs_clearcurdir();
 	vfs_unmountall();
@@ -215,37 +217,6 @@ kmain(char *arguments)
 	//kprintf("Entrare nel main");
 	boot();
 
-	/*
-	uint32_t vaddr = 0xaaaaa1c3;
-	uint32_t vpage = vaddr & TLBHI_VPAGE;
-	kprintf("vaddr: %05x - vpage: %05x\n", vaddr, vpage);
-
-	uint32_t paddr = 0x0a4bc6;
-	uint32_t ppage = paddr & TLBLO_PPAGE;
-	kprintf("paddr: %05x - ppage: %05x\n", paddr, ppage);
-
-	// enable write permission on this entry
-	uint32_t entrylowbits = ppage | TLBLO_DIRTY; 
-	kprintf("entrylo: %05x\n", entrylowbits);
-
-	uint32_t entryhi;
-	uint32_t entrylo;
-
-	for(int i = 0; i < NUM_TLB; i++) {
-		tlb_read(&entryhi, &entrylo, (uint32_t) i);
-		kprintf("entryhi: %05x, entrylo: %05x\n", entryhi, entrylo);
-	}
-
-	tlb_write(vpage, entrylowbits, 0);
-	int index = tlb_probe(vpage, entrylowbits);
-	tlb_read(&entryhi, &entrylo, 0);
-	kprintf("index: %d\nvpage: %05x\nentrylowbits: %05x\nentryhi: %05x\nentrylo: %05x\n===============\n", index, vpage, entrylowbits, entryhi, entrylo);
-
-	tlb_write(TLBHI_INVALID(1), TLBLO_INVALID(), 1);
-	index = tlb_probe(TLBHI_INVALID(1), TLBLO_INVALID());
-	tlb_read(&entryhi, &entrylo, 1);
-	kprintf("index: %d\nentryhi: %05x\nentrylo: %05x\n", index, entryhi, entrylo);
-	*/
-
+	
 	menu(arguments);
 }

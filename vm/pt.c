@@ -48,11 +48,7 @@
 #include <coremap.h>
 #include <pt.h>
 #include <kern/fcntl.h>
-
-
-/* under dumbvm, always have 72k of user stack */
-/* (this must be > 64K so argument blocks of size ARG_MAX will fit) */
-#define PAGING_STACKPAGES    18
+#include <vmstats.h>
 
 
 /*
@@ -85,6 +81,9 @@ get_vaddr_from_index(struct addrspace *as, int index);
 
 static paddr_t
 pt_page_replacement(int dst_index);
+
+static void
+pt_invalid_entry(struct addrspace *as,int index);
 
 /*
 	Translate the vaddr to the page addr in the pt
@@ -166,6 +165,7 @@ pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
 		{
 		case 0:
 			/* Everything alright */
+			increase_pf_from_swap();
 			break;
 		case -1:
 			/* Everything alright */
@@ -180,6 +180,17 @@ pt_read_from_swap(vaddr_t vaddr, paddr_t paddr){
 		}			
 
 }
+
+static void
+pt_invalid_entry(struct addrspace *as, int index){
+	/* Perform the page-out operations */
+	as->control_bits[index] &= ~PT_VALID_BIT;
+	if(!(as->control_bits[index] & PT_SWAP_BIT)) {
+		as->control_bits[index] |= PT_SWAP_BIT;
+	}
+	tlb_invalid_entry(get_vaddr_from_index(as, index));
+}
+
 
 /* 
  * Handles page replacement.
@@ -212,24 +223,25 @@ pt_page_replacement(int dst_index) {
 	if(victim_index < 0) {
 		panic("Out of memory");
 	}
-
+	/* Mantain information about the paged-out frame  to perform replacement */
 	victim_vaddr = get_vaddr_from_index(as, victim_index);
 	victim_paddr = as->frames[victim_index];
 	dst_vaddr = get_vaddr_from_index(as, dst_index); 
 
-	as->control_bits[victim_index] &= ~PT_VALID_BIT;
-	if(!(as->control_bits[victim_index] & PT_SWAP_BIT)) {
-		as->control_bits[victim_index] |= PT_SWAP_BIT;
-	}
-	tlb_invalid_entry(victim_vaddr);
+	pt_invalid_entry(as,victim_index);
+
+
+	
 
 	if(as->control_bits[dst_index] & PT_SWAP_BIT) {
 		/* The page has been written on the swap file */
 		sf_replacepage(victim_vaddr, dst_vaddr, victim_paddr);
+		// Count this as a pf_disk and pf_swap
+		increase_pf_disk();
+		increase_pf_from_swap();
 	}
 	else {
 		/* Need to load the page from the elf file */
-
 		sf_pageout(victim_vaddr, victim_paddr, -1);
 		as_zero_region(victim_paddr, 1);
 		/* 
@@ -246,8 +258,15 @@ pt_page_replacement(int dst_index) {
 			/* If is the first access to a stack page (hopefully write), we set the swap bit on the entry */
 			as->control_bits[dst_index] |= PT_SWAP_BIT;
 		}
+		// Count this as a pf_disk and pf_elf
+		increase_pf_disk();
+		increase_pf_from_elf();
 	}
-
+	/* Set the new entry in the pt */
+	as->frames[dst_index] = victim_paddr;
+	as->control_bits[dst_index] |= PT_VALID_BIT;
+	// Page replacement always requires a swap out, count this as swapfile write
+	increase_swapfile_writes();
 	return victim_paddr;
 } 
 
@@ -436,6 +455,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	}
 
 	
+	// Getting to this point the TLB fault is valid and we can count it
+	increase_tlb_faults();
 
 	/* 
 	 * If faultaddress is already in memory, load the appropriate paddr in the TLB,
@@ -478,6 +499,8 @@ pt_getframe(vaddr_t addr){
 	if (as->control_bits[index] & PT_VALID_BIT){
 		/* Page is in memory, return the physical frame */
 		paddr = as->frames[index];
+		// Count this as a tlb reload
+		increase_tlb_reloads();
 	}else{
 		/* PAGE FAULT: frame not in memory */
 		paddr = pt_pagefault(index);
@@ -513,6 +536,9 @@ pt_pagefault(int index){
 		as_zero_region(paddr,1);
 		if (as->control_bits[index] & PT_SWAP_BIT){
 			pt_read_from_swap(get_vaddr_from_index(as,index), paddr);
+			// Frame loaded from swap, count this as pf from disk and pf from swap
+			increase_pf_disk();
+			increase_pf_from_swap();
 		}else{
 			/* Compute the offset in the elf file of the page we want to read*/
 			/* If the address is stack (not in the swap file), allocate an empty frame */
@@ -522,9 +548,14 @@ pt_pagefault(int index){
 				if (load_from_elf(as, paddr, offset)){
 					panic("Error during the load of a page from the elf file");
 				}
+				// Frame is loaded from the elf file, count as pf from disk and pf from elf
+				increase_pf_disk();
+				increase_pf_from_elf();
 			}else{
 				/* If is the first access to a stack page (hopefully write), we set the swap bit on the entry */
 				as->control_bits[index] |= PT_SWAP_BIT;
+				// Empty frame allocated, count this as a zeroed page fault
+				increase_pf_zeroed();
 			}
 		}
 	} 
@@ -562,272 +593,3 @@ pt_pageout(int index){
 	return 0;
 }
 
-/*
-	Creates the address space structure for a process
-*/
-struct addrspace *
-as_create(void)
-{
-	struct addrspace *as;
-
-	as = kmalloc(sizeof(struct addrspace));
-	if (as == NULL) {
-		return NULL;
-	}
-	bzero(as, sizeof(struct addrspace));
-	/* 	We initialize the page table only after defining regions
-		(and knowing the dimension of the virtual memory)
-	*/
-	return as;
-}
-
-/*
-	Destroy the address space of a process, releasing the occupied frames
-	and deallocating the as structure
-*/
-void
-as_destroy(struct addrspace *as)
-{
-	/*
-		Free all allocated frames 
-	*/
-	int i;
-	for (i = 0; i < as->n_entry; i++){
-		if ((as->control_bits[i] & PT_VALID_BIT) == PT_VALID_BIT){
-			// Valid entry, frame has to be freed
-			releaseframe(as->frames[i]);
-		}
-	}
-	as->segs.as_npages1 = 0;
-	as->segs.as_npages2 = 0;
-	as->segs.as_vbase1 = 0;
-	as->segs.as_vbase2 = 0;
-	as->segs.as_stackptbase = 0;
-	as->segs.as_stackvbase = 0;
-	as->segs.as_stackvtop = 0;
-	/*
-		Destroy all addrspace structures (page table and segments)
-	*/
-	kfree(as->frames);
-	kfree(as->control_bits);
-	pt_fifo_free(as->page_queue);
-
-	vfs_close(as->swapfile);
-	vfs_close(as->segs.progelf);
-
-	kfree(as);
-}
-
-void
-as_activate(void)
-{
-	struct addrspace *as;
-
-	as = proc_getas();
-	if (as == NULL) {
-		/*
-		 * Kernel thread without an address space; leave the
-		 * prior address space in place.
-		 */
-		return;
-	}
-	/* Invalid the TLB on context switch */
-	tlb_invalid();
-}
-
-void
-as_deactivate(void)
-{
-	/*
-	 * Write this. For many designs it won't need to actually do
-	 * anything. See proc.c for an explanation of why it (might)
-	 * be needed.
-	 */
-}
-
-int
-as_define_region(struct addrspace *as, vaddr_t vaddr, size_t memsize,
-		 Elf_Phdr ph, int readable, int writeable, int executable)
-{
-
-	size_t npages;
-
-	/* Align the region. First, the base... */
-	memsize += vaddr & ~(vaddr_t)PAGE_FRAME;
-	vaddr &= PAGE_FRAME;
-
-	/* ...and now the length. */
-	memsize = (memsize + PAGE_SIZE - 1) & PAGE_FRAME;
-
-	npages = memsize / PAGE_SIZE;
-	/* We don't use these - all pages are read-write */
-	(void)readable;
-	(void)writeable;
-	(void)executable;
-
-	if (as->segs.as_vbase1 == 0) {
-		as->segs.as_vbase1 = vaddr;
-		as->segs.as_npages1 = npages;
-		as->segs.text_ph = ph;
-		return 0;
-	}
-
-	if (as->segs.as_vbase2 == 0) {
-		as->segs.as_vbase2 = vaddr;
-		as->segs.as_npages2 = npages;
-		as->segs.data_ph = ph;
-		return 0;
-	}
-
-	
-	/*
-	 * Support for more than two regions is not available.
-	 */
-	kprintf("dumbvm: Warning: too many regions\n");
-	return ENOSYS;
-}
-
-/* Saves the program's elf vnode into the addrspace */
-void as_set_progelf(struct addrspace *as, struct vnode* elf) {
-	/* Increase the refcount of elf's vnode, see runprogram for more details on this */
-	VOP_INCREF(elf);
-
-	as->segs.progelf = elf;
-}
-
-/* Saves the swapfile's vnode into the addrspace */
-int as_set_swapfile(struct addrspace *as, char* path) {
-	int result;
-	struct vnode *sf;
-	result = vfs_open(path, O_RDWR | O_TRUNC | O_CREAT, 0, &sf);
-	if (result) {
-		return result;
-	}
-
-	as->swapfile = sf;
-
-	return 0;
-}
-
-/* Initialize the address space after the definition of all the segments */
-void
-as_initialize_pt(struct addrspace *as){
-	int i;
-	KASSERT(as->segs.as_vbase1 != 0);
-	KASSERT(as->segs.as_vbase2 != 0);
-	KASSERT(as->segs.as_stackptbase != 0);
-	KASSERT(as->n_entry == 0);
-
-	as->n_entry = as->segs.as_npages1 + as->segs.as_npages2 + PAGING_STACKPAGES;
-	as->frames = kmalloc(as->n_entry*sizeof(paddr_t));
-	for(i = 0; i < as->n_entry; i++){
-		as->frames[i] = (paddr_t)0;
-	}
-	if (as->frames == NULL){
-		panic("Problem in creating page table");
-	}
-	as->control_bits = kmalloc(as->n_entry*(sizeof(unsigned char)));
-	if (as->control_bits == NULL) {
-		panic("Problem in creating page table");
-	}
-	as->page_queue = pt_fifo_init();
-	for(i = 0; i < as->n_entry; i++){
-		as->control_bits[i] = 0;
-	}
-	as->last_c_freed = 0;
-
-
-}
-
-
-int
-as_copy(struct addrspace *old, struct addrspace **ret)
-{
-	struct addrspace *newas;
-
-	newas = as_create();
-	if (newas==NULL) {
-		return ENOMEM;
-	}
-
-	/*
-	 * 	Copy the page table
-	 */
-	newas->frames = kmalloc(sizeof(paddr_t)*old->n_entry);
-	newas->control_bits = kmalloc(sizeof(unsigned char)*old->n_entry);
-	newas->n_entry = old->n_entry;
-	newas->last_c_freed = 0;
-	
-	memmove((void *)newas->frames,
-		(const void *)old->frames,
-		sizeof(paddr_t)*old->n_entry);
-
-	memmove((void *)newas->control_bits,
-	(const void *)old->control_bits,
-	sizeof(unsigned char)*old->n_entry);
-
-	/*
-		Copy the segments structure
-	*/
-	newas->segs = old->segs;
-
-	/*
-		Copy the elf file and assign new swapfile
-	*/
-	as_set_progelf(newas, old->segs.progelf);
-
-	*ret = newas;
-	return 0;
-}
-
-
-
-int
-as_define_stack(struct addrspace *as, vaddr_t *stackptr)
-{	
-	#if OPT_PAGING
-		as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
-		as->segs.as_stackvtop = USERSTACK;
-
-		if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
-			/* Already defined the other regions, I can map the stack in the PT */
-			as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
-		}
-
-		/* Initial user-level stack pointer */
-		*stackptr = as->segs.as_stackvtop;
-	#else
-		KASSERT(as->as_stackpbase != 0);
-
-		*stackptr = USERSTACK;
-	#endif
-
-	return 0;
-}
-
-/* SHOULD NOT BE NEEDED */
-
-int
-as_prepare_load(struct addrspace *as)
-{
-	/*
-	 * Write this.
-	 */
-	KASSERT(as->segs.as_vbase1 == 0);
-	KASSERT(as->segs.as_vbase2 == 0);
-	KASSERT(as->segs.as_stackptbase == 0);
-
-	(void)as;
-	return 0;
-}
-
-int
-as_complete_load(struct addrspace *as)
-{
-	/*
-	 * Write this.
-	 */
-
-	(void)as;
-	return 0;
-}

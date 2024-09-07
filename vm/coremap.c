@@ -4,17 +4,18 @@
 #include <spinlock.h>
 #include <lib.h>
 #include <coremap.h>
+#include <vmstats.h>
 
 
 //#include <current.h>
 
 
 
-
-
 static int bootstrap_completed = 0; // Check if the coremap is active and choose how to allocate kernel memory
 static struct spinlock bootstrap_lock = SPINLOCK_INITIALIZER;
 static struct coremap_t *coremap;
+
+
 
 
 int
@@ -69,6 +70,8 @@ coremap_bootstrap(void){
     spinlock_acquire(&bootstrap_lock);
     bootstrap_completed = 1;
     spinlock_release(&bootstrap_lock);
+
+    initialize_vmstats();
 
 }
 
