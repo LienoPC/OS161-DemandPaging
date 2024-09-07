@@ -334,7 +334,7 @@ mips_trap(struct trapframe *tf)
 
 	cputhreads[curcpu->c_number] = (vaddr_t)curthread;
 	cpustacks[curcpu->c_number] = (vaddr_t)curthread->t_stack + STACK_SIZE;
-	//kprintf("\nStacks: curcpu=%d\ttf=%d\n", cpustacks[curcpu->c_number]-1, (vaddr_t)tf);
+
 	/*
 	 * This assertion will fail if either
 	 *   (1) curthread->t_stack is corrupted, or

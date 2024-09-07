@@ -27,7 +27,12 @@
  * SUCH DAMAGE.
  */
 
-
+#include <types.h>
+#include <kern/errno.h>
+#include <lib.h>
+#include <addrspace.h>
+#include <vm.h>
+#include <proc.h>
 
 /*
  * Note! If OPT_DUMBVM is set, as is the case until you start the VM
@@ -35,12 +40,10 @@
  * used. The cheesy hack versions in dumbvm.c are used instead.
  */
 
-struct vmstats *stats;
 
 #if OPT_DUMBVM
 
 #elif OPT_PAGING
-
 
 
 #endif

@@ -10,7 +10,6 @@ KDEBUG=-g -Og
 # Name of the kernel config file
 CONFNAME=PAGING
 
-CFLAGS=-O0
 .include "$(TOP)/mk/os161.config.mk"
 .include "files.mk"
 .include "$(TOP)/mk/os161.kernel.mk"

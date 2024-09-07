@@ -5,10 +5,7 @@
 #include <spinlock.h>
 #include <vm.h>
 #include <vm_tlb.h>
-#include <vmstats.h>
 
-
-struct vmstats *stats;
 static uint32_t tlb_findfree(void); 
 static uint32_t tlb_get_rr_victim(void);    
 
@@ -40,7 +37,6 @@ static uint32_t tlb_get_rr_victim(void) {
 	uint32_t victim;
 	static uint32_t next_victim = 0;
 
-	
 	/* Simple (and dumb) round robin victim selection */
 	victim = next_victim;
 	next_victim = (next_victim + 1) % NUM_TLB;
@@ -84,12 +80,7 @@ void tlb_loadentry(vaddr_t vaddr, paddr_t paddr, bool readonly) {
 	
 
 	if (index == NUM_TLB) {
-		// Count this fault as TLB miss with replacement
-		stats->tlb_faults_with_replace++;
 		index = tlb_get_rr_victim();
-	}else{
-		// Count this fault as TLB miss with free
-		stats->tlb_faults_with_free++;
 	}
 	
 	ehi = vaddr & TLBHI_VPAGE;
