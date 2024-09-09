@@ -243,3 +243,16 @@ releasecontiguousalloc(paddr_t p_addr){
     spinlock_release(&coremap->coremap_lock);
     //andiamo
 }
+
+int
+checkpercentageofuse(){
+    int i,count = 0;
+    spinlock_acquire(&coremap->coremap_lock);
+    for(i = 0; i < coremap->nRamFrames; i++){
+        if (coremap->bitmap[i] == 0){
+            count++;
+        }
+    }
+    spinlock_release(&coremap->coremap_lock);
+    return count*100/coremap->nRamFrames;
+}

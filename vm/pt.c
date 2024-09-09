@@ -526,12 +526,13 @@ pt_pagefault(int index){
 	struct addrspace *as;
 	as = proc_getas();
 
-	/* First get the physical frame and then start the page replacement if there are no available frames */
-	paddr = getfreeframe();
-	if (paddr == (paddr_t) NULL){
-		/* Start page replacement */
+	/* Verify if the ram is being fulled */
+	if (checkpercentageofuse() > 90){
+		// Start directly with page replacement
 		paddr = pt_page_replacement(index);
 	}else{
+		/* First get the physical frame and then start the page replacement if there are no available frames */
+		paddr = getfreeframe();
 		/* Zeroing the frame */
 		as_zero_region(paddr,1);
 		if (as->control_bits[index] & PT_SWAP_BIT){
@@ -558,7 +559,9 @@ pt_pagefault(int index){
 				increase_pf_zeroed();
 			}
 		}
-	} 
+	
+	}
+	
 
 	return paddr;
 }
