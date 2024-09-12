@@ -195,7 +195,7 @@ pt_invalid_entry(struct addrspace *as, int index){
 /* 
  * Handles page replacement.
  * When it returns, the PT won't be in a consistent state, as
- * a few other operations in pt_get_frame are needed to update it.
+ * a few other operations in pt_getframe are needed to update it.
  */
 static paddr_t
 pt_page_replacement(int dst_index) {
@@ -223,15 +223,12 @@ pt_page_replacement(int dst_index) {
 	if(victim_index < 0) {
 		panic("Out of memory");
 	}
-	/* Mantain information about the paged-out frame  to perform replacement */
+	/* Mantain information about the paged-out frame to perform replacement */
 	victim_vaddr = get_vaddr_from_index(as, victim_index);
 	victim_paddr = as->frames[victim_index];
 	dst_vaddr = get_vaddr_from_index(as, dst_index); 
 
 	pt_invalid_entry(as,victim_index);
-
-
-	
 
 	if(as->control_bits[dst_index] & PT_SWAP_BIT) {
 		/* The page has been written on the swap file */
