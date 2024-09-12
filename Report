@@ -1,0 +1,28 @@
+- [Paging](#paging)
+    - [Introduzione](#introduzione)
+    - [TLB](#tlb)
+    - [Coremap](#coremap)
+    - [Per-process Page Table](#page-table)
+    - [On Demand Page Loading](#on-demand)
+    - [Swap File Management](#swap-file)
+    - [Page Replacement](#page-replacement)
+    - [Statistics](#statistics)
+- [Conclusioni](#conclusioni)
+
+
+# C1: Paging Project
+
+## Introduzione
+
+Lo scopo di questo progetto è quello di implementare un'evoluzione della gestione di memoria virtuale (DUMBVM) che di base è utilizzata nel kernel di OS161. Nello specifico, la soluzione proposta, si basa sull'uso di una **Page Table** nella sua versione _Per-process_, implementando la possibilità di leggere le pagine dalla memoria virtuale seguendo il modello _On-Demand_, cioè quello di caricare una pagina in memoria fisica solo quando viene referenziata per la prima volta.
+Si vuole gestire poi anche il caso di riempimento della memoria fisica e intervento di un algoritmo di page-replacement (nel nostro caso, FIFO), che permetta l'esecuzione di uno userprocess anche nel caso in cui la sua memoria virtuale sia più grande della memoria RAM.
+L'accesso ai frame della memoria e l'allocazione di questi è gestita tramite una struttura apposita, una _coremap_, richiamata sia dal gestore della memoria kernel (kmalloc), sia dall'allocatore dei frame user.
+Infine, il funzionamento del demand paging e del page replacement sarà supportato dalla gestione di uno spazio di swap sul disco, tramite la definizione di un file apposito di lunghezza fissa che accoglierà i frame sottoposti a swap-out e permetterà eventualmente lo swap-in laddove necessario.
+
+## TLB
+
+
+
+## Conclusioni
+
+Per concludere, le strutture introdotte mancano di alcuni accorgimenti, come ad esempio l'utilizzo di primitive di sincronizzazione per la page table, dato che si eseguono sempre, in questa versione di OS161, processi utente single-threaded. Nonostante l'introduzione della nuova memoria virtuale vada a peggiorare le prestazioni per i programmi utente più semplici, essa permette di gestire il caso di processo utente con memoria virtuale più grande della memoria ram e di garantire, in teoria, la mancanza di out of memory.
