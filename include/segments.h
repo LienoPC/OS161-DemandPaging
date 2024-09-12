@@ -5,7 +5,6 @@
 
 struct segments {
     struct vnode *progelf;
-    Elf_Ehdr eh;
     Elf_Phdr text_ph;
     Elf_Phdr data_ph;
     vaddr_t as_vbase1;

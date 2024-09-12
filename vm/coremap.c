@@ -17,7 +17,7 @@ static struct coremap_t *coremap;
 
 
 
-
+/* Checks if the coremap has been initialized */
 int
 isCoremapActive(){
     int active;
@@ -36,6 +36,8 @@ void
 coremap_bootstrap(void){
     int bootstrap_pages = 0;
     int i;
+    
+    KASSERT(!isCoremapActive());
     
     /* Alloc coremap struct */
     coremap = kmalloc(sizeof(*coremap));
@@ -110,8 +112,7 @@ paddr_t getfreeframe() {
 }
 
 
-/* Tries to get npages continuous pages using the bitmap */
-
+/* Tries to get n continuous pages using the bitmap */
 paddr_t getcontinuousalloc(int npages){
 
     paddr_t addr;
@@ -144,6 +145,7 @@ paddr_t getcontinuousalloc(int npages){
   return addr;
 }
 
+/* Release a frame by setting 1 in its entry */
 void           
 releaseframe(paddr_t p_addr){
     int f_number;
@@ -154,7 +156,7 @@ releaseframe(paddr_t p_addr){
     spinlock_release(&coremap->coremap_lock);
 }
 
-
+/* Release an interval of kernel frames, using allocSize to know the number of frames to free */
 void
 releasecontiguousalloc(paddr_t p_addr){
     int f_number, i;
@@ -172,9 +174,9 @@ releasecontiguousalloc(paddr_t p_addr){
     }
     coremap->allocSize[f_number] = 0;
     spinlock_release(&coremap->coremap_lock);
-    //andiamo
 }
 
+/* Dynamically checks the number of frames occupied and returns the percentage of ram used */
 int
 checkpercentageofuse(){
     int i,count = 0;

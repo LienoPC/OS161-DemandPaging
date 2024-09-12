@@ -1,13 +1,10 @@
-- [Paging](#paging)
-    - [Introduzione](#introduzione)
-    - [TLB](#tlb)
-    - [Coremap](#coremap)
-    - [Per-process Page Table](#page-table)
-    - [On Demand Page Loading](#on-demand)
-    - [Swap File Management](#swap-file)
-    - [Page Replacement](#page-replacement)
-    - [Statistics](#statistics)
-- [Conclusioni](#conclusioni)
+- [C1: Paging Project](#c1-paging-project)
+  - [Introduzione](#introduzione)
+  - [TLB](#tlb)
+  - [Coremap](#coremap)
+  - [Page Table](#page-table)
+  - [On-Demand Paging](#on-demand-paging)
+  - [Conclusioni](#conclusioni)
 
 
 # C1: Paging Project
@@ -20,6 +17,92 @@ L'accesso ai frame della memoria e l'allocazione di questi è gestita tramite un
 Infine, il funzionamento del demand paging e del page replacement sarà supportato dalla gestione di uno spazio di swap sul disco, tramite la definizione di un file apposito di lunghezza fissa che accoglierà i frame sottoposti a swap-out e permetterà eventualmente lo swap-in laddove necessario.
 
 ## TLB
+
+## Coremap
+
+Un'aspetto importante della gestione della memoria riguarda la struttura per tenere traccia dei frame liberi e, di conseguenza, la loro allocazione. La necessità di allocare memoria contigua per il kernel ci ha portato a scegliere un'implementazione basata su una semplice bitmap nella struct `coremap_t`, accompagnata da un vettore `allocSize` della stessa dimensione che tiene traccia degli intervalli di frame contigui allocati (similmente a quanto fatto da dumbvm). La bitmap, mantenuta come array di caratteri, assegna 0 ad un frame occupato e 1 ad un frame libero. La struttura di coremap contiene poi il numero totale di frame in memoria (`nRamFrames`), uno spinlock per regolarne l'accesso e `last_frame`, usato nell'algoritmo che sceglie da dove partire per la ricerca di frame da usare per allocazione contigua.
+Tra i metodi più importanti identifichiamo:
+<list>
+1. `paddr_t getfreeframe(void)`, che ritorna l'indirizzo fisico di un singolo frame allocato, richiamato dalla page table quando si vuole caricare una pagina in memoria
+2. `paddr_t getcontinuousalloc(int npages)`, che ritorna l'indirizzo fisico del primo di n-frames allocati per il kernel (-1 se non ci sono abbastanza frame liberi)
+3. Le relative funzioni di de-allocazione `releaseframe` e `releasecontiguousalloc`
+E' stata modificata anche la funzione `alloc_kpages` in modo da utilizzare la coremap se già inizializzata, altrimenti utilizzando la `ram_stealmem` (solo durante la fase di startup del sistema).
+
+
+## Page Table
+
+Come già anticipato, la tabella delle pagine segue una struttura per-process, in cui ogni entry corrisponde ad una pagina logica dello spazio di indirizzamento virtuale del processo. Essa è gestita all'interno del file `pt.c` usando una struct definita in `addrspace.h` composta dai seguenti campi:
+1. `paddr_t *frames`: vettore che associa ad ogni entry della tabella un indirizzo fisico, corrispondente al, se presente, frame associato alla pagina logica indicizzata
+2. `unsigned char *control_bits`: vettore che associa ad ogni entry i bit di controllo, quali:
+    - S, swap bit, indica se l'entry deve essere gestita usando lo spazio di swap 
+    - V, valid bit, indica se l'entry è valida, cioè se il frame è presente in memoria. 
+    - E' stata predisposta anche la possibilità di usare il dirty bit e il reference bit, ma a causa della mancanza di supporto hardware associato in questa versione della memoria virtuale non sono utilizzati.
+3. `int n_entry`: inizializzata alla creazione della PT, indica il numero di entry nella page table e corrisponde al numero di pagine logiche del processo in esecuzione
+4. `vnode *swapfile`: mantiene un riferimento al vnode dello swapfile, che viene tenuto sempre aperto durante l'esecuzione del processo
+5. `segments segs`: variabile del tipo `struct segments` definita in `segments.h`, che mantiene tutte le informazioni riguardo lo spazio di memoria virtuale del processo in esecuzione e il suo file elf; è composta dai seguenti campi:
+   - `vnode *progelf`: riferimento al vnode dell'eseguibile del processo in esecuzione
+   - `text_ph e data_ph`: program headers delle sezioni usati per la lettura delle pagine nel demand paging (in questa versione si supporta unicamente la presenza di due sezioni più lo stack)
+   - `as_vbase1 e as_vbase2`: primi indirizzi virtuali delle due sezioni della memoria user, usati per la mappatura con gli indici della page table
+   - `as_npages1 e as_npages2`: numero di pagine delle due sezioni
+   - `as_stackvbase, as_stackvtop`: rispettivamente l'ultimo indirizzo virtuale valido dello stack e il primo indirizzo valido (lo stack cresce dall'alto verso il basso). In questa versione (così come in dumbvm) usiamo uno stack a lunghezza fissa
+   - `as_stackptbase`: primo indirizzo virtuale dello stack mappato 'in basso' nella page table
+6. `pt_fifo_t *page_queue`: campo contenente la coda FIFO usata nel page replacement
+
+A parte i principali metodi di accesso e utilizzo della page table, è interessante dare un'occhiata al processo di traduzione da indirizzo virtuale del processo a indice della page table, gestito dai metodi statici `static int get_pt_index(struct addrspace *as, vaddr_t vaddr)` e `static vaddr_t get_vaddr_from_index(struct addrspace *as, int index)`:
+
+```c
+static int
+get_pt_index(struct addrspace *as, vaddr_t vaddr){
+	int index = -1;
+	if(vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
+		index = (vaddr - as->segs.as_vbase1)/PAGE_SIZE;
+	}
+	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
+		index = (vaddr - as->segs.as_vbase2)/PAGE_SIZE + as->segs.as_npages1;
+	}else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
+		index = (as->segs.as_stackptbase + (as->segs.as_stackvtop - vaddr))/PAGE_SIZE;
+	}else{
+		// Invalid vaddr
+		index = -1;
+	}
+	return index;
+}
+
+```
+Si assegnano cioè progressivamente le prime `as_npages1` entry della pt al primo segmento, a partire poi dall'indice `as_npages1` vengono mappate le pagine del secondo segmento e infine quelle dello stack, dove `as_stackptbase` viene definito nella funzione `as_define_stack` come indirizzo logico subito successivo alla somma di as_npages1 e 2.
+
+```c
+int
+as_define_stack(struct addrspace *as, vaddr_t *stackptr)
+{	
+	#if OPT_PAGING
+		as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
+		as->segs.as_stackvtop = USERSTACK;
+
+		if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
+			/* Already defined the other regions, I can map the stack in the PT */
+			as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
+		}
+
+		/* Initial user-level stack pointer */
+		*stackptr = as->segs.as_stackvtop;
+	#else
+		KASSERT(as->as_stackpbase != 0);
+
+		*stackptr = USERSTACK;
+	#endif
+
+	return 0;
+}
+
+```
+
+## On-Demand Paging
+L'implementazione della page table è stata associata ad una gestione della memoria del tipo "On-Demand", per cui le pagine logiche di un processo sono caricate in memoria solo dopo essere state referenziate dal programma. Questo vuol dire che all'inizio la page table non ha frame fisici in ram, per cui la prima istruzione parte con un tlb miss (ricevuto dalla funzione `vm_fault`) che segue, quindi, il seguente iter:
+1. Identifica il tipo di fault, interrompendo il processo nel caso di accesso in scrittura a pagine _read-only_
+2. Verifica a quale segmento del processo il faultaddr appartiene, per settare correttamente il read-only bit nell'inserimento della nuova entry nella tlb
+3. Viene chiamata la funzione `paddr_t pt_getframe(vaddr_t addr)` che, dato l'indirizzo virtuale di una pagina, ritorna il suo corrispettivo indirizzo fisico in memoria
+4. La funzione verifica quindi se l'entry associata al faultaddress sia valida, ritornando direttamente l'indirizzo al frame associato, altrimenti chiama la funzione di page fault `paddr_t pt_pagefault(int index)` 
 
 
 

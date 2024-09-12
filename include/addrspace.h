@@ -75,7 +75,6 @@ struct addrspace {
         paddr_t *frames;
         unsigned char *control_bits; // SVDR: S - swap bit, V - valid bit, D - dirty bit, R - reference bit
         int n_entry;
-        int last_c_freed;
         struct vnode *swapfile;      // Swapfile vnode 
         struct segments segs;        // Elf header segments
         pt_fifo_t *page_queue;       // FIFO queue to track mapped pages (used for page replacement) 

@@ -231,7 +231,6 @@ as_initialize_pt(struct addrspace *as){
 	for(i = 0; i < as->n_entry; i++){
 		as->control_bits[i] = 0;
 	}
-	as->last_c_freed = 0;
 
 
 }
@@ -253,8 +252,7 @@ as_copy(struct addrspace *old, struct addrspace **ret)
 	newas->frames = kmalloc(sizeof(paddr_t)*old->n_entry);
 	newas->control_bits = kmalloc(sizeof(unsigned char)*old->n_entry);
 	newas->n_entry = old->n_entry;
-	newas->last_c_freed = 0;
-	
+		
 	memmove((void *)newas->frames,
 		(const void *)old->frames,
 		sizeof(paddr_t)*old->n_entry);
