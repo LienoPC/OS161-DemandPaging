@@ -302,46 +302,15 @@ vm_can_sleep(void)
 vaddr_t
 alloc_kpages(unsigned npages)
 {
-
-	(void) npages;
-	paddr_t pa, first_steal, search;
-	struct addrspace *as;
-	int i,j;
+	paddr_t pa;
 	vm_can_sleep();
 	if (isCoremapActive()) {
 		/* Use standard paging methods */
 		pa = getcontinuousalloc((int)npages);
 		if (pa == (paddr_t) NULL){
-			/* Could not find enough continuous pages, we should steal user pages  */
-			/* TODO */
-			as = proc_getas();
-			/* First search for contiguous nframes to steal from the user */
-			first_steal = findfirsttosteal(npages);
-			
-			if(first_steal == (paddr_t)NULL){
-				/* Didn't found enough memory on contiguous steal, out of memory*/
-				panic("Completely out of memory!");
-			}
-
-			/* Starting from the first frame, execute the page-out for every frame in the interval */
-			for(i = 0; i < (int)npages; i++){
-				search = first_steal + PAGE_SIZE*i;
-				for(j = 0; j < as->n_entry; j++){
-					if (as->frames[j] == search){
-						// Found the frame, free it
-						if(!pt_pageout(j)){
-							panic("Could not steal a user frame");
-						}
-						
-					}
-				}
-			}
-			
-			/* Effectively assign to kernel the freed pages */
-			pa = stealcontinuousalloc(npages, first_steal);
-
+			// Should never occour, given that there is always, at least, 20% of ram memory available (but not contiguous)
+			panic("Completely out of memory");
 		}
-
 	}else{
 		/* Use ram_stealmem */
 		spinlock_acquire(&stealmem_lock);

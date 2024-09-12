@@ -31,7 +31,7 @@ isCoremapActive(){
              
 
 
-
+/* Allocates coremap structure and prepares it to be used both by kmalloc and page table */
 void            
 coremap_bootstrap(void){
     int bootstrap_pages = 0;
@@ -77,7 +77,6 @@ coremap_bootstrap(void){
 
 
 /* Returns the physical address of a single frame and allocates it*/
-
 paddr_t getfreeframe() {
     /* Linear search on the bitmap to find a free frame */
     paddr_t addr;
@@ -143,74 +142,6 @@ paddr_t getcontinuousalloc(int npages){
   spinlock_release(&coremap->coremap_lock);
 
   return addr;
-}
-
-/*
-    Finds the interval of user frame to steal, returning the first frame to the pt
-*/
-paddr_t findfirsttosteal(int npages){
-    
-    int i;
-    int f_first, counter, skip;
-    paddr_t p_first = (paddr_t) NULL;
-    f_first = -1;
-    counter = 0;
-    skip = 0;
-    spinlock_acquire(&coremap->coremap_lock);
-    for(i = 0; i < coremap->nRamFrames; i++){
-
-        if (coremap->allocSize[i] != 0){
-            skip = (int)coremap->allocSize[i];
-            counter = 0;
-            f_first = -1;
-        }
-        if(skip > 0){
-            skip--;
-            continue;
-        }
-        if (coremap->allocSize[i] == 0 && f_first != -1){
-            // the page belongs to the user
-            counter++;
-            if (counter == npages){
-                break;
-            }   
-        }
-        if(coremap->allocSize[i] == 0 && f_first == -1){
-            // first user frame found in the interval
-            f_first = i;
-            counter = 1;
-        }
-    }
-    if(f_first != -1){
-        // found enough contiguous frames
-        p_first = f_first*PAGE_SIZE;
-    }
-    spinlock_release(&coremap->coremap_lock);
-    return p_first;
-
-}
-
-
-/* If the kernel needs npages for continuos allocation (and they aren't available through getcontinuousalloc)
-    npages are freed from the user space and the corresponding page table entries are swapped-out
-*/
-
-paddr_t stealcontinuousalloc(int npages, paddr_t first){
-
-    /* Serve aggiungere swap out su SWAPFILE? */
-    
-    int i;
-    int f_first;
-    f_first = first/PAGE_SIZE;
-    KASSERT(f_first > 0 && f_first < coremap->nRamFrames);
-    spinlock_acquire(&coremap->coremap_lock);
-    for(i = f_first; i < f_first + npages; i++){
-        coremap->bitmap[i] = (unsigned char) 0;
-    }
-    coremap->allocSize[f_first] = npages;
-    spinlock_release(&coremap->coremap_lock);
-    return first;
-
 }
 
 void           
