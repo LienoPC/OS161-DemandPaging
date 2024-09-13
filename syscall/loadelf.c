@@ -209,10 +209,6 @@ load_elf(struct vnode *v, vaddr_t *entrypoint)
 		return ENOEXEC;
 	}
 
-	#if OPT_PAGING
-	as->segs.eh = eh;
-	#endif
-
 	/*
 	 * Go through the list of segments and set up the address space.
 	 *

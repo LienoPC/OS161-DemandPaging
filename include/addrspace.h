@@ -40,6 +40,8 @@
 #define PT_SWAP_BIT 0x8
 
 #define PAGING_STACKPAGES 18
+#define MAX_PERCENTAGE_MEMORY 80
+
 //#include <types.h>
 #include <vm.h>
 #include <opt-paging.h>

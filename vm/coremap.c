@@ -7,9 +7,6 @@
 #include <vmstats.h>
 
 
-//#include <current.h>
-
-
 
 static int bootstrap_completed = 0; // Check if the coremap is active and choose how to allocate kernel memory
 static struct spinlock bootstrap_lock = SPINLOCK_INITIALIZER;

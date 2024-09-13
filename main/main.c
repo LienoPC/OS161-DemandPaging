@@ -155,7 +155,9 @@ shutdown(void)
 {
 
 	kprintf("Shutting down.\n");
+	#if OPT_PAGING
 	print_statistics();
+	#endif
 	vfs_clearbootfs();
 	vfs_clearcurdir();
 	vfs_unmountall();

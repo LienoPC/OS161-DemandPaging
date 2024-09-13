@@ -44,6 +44,7 @@
 #include <vm_tlb.h>
 #include <vm.h>
 #include <vfs.h>
+#include <syscall.h>
 #include <swapfile.h>
 #include <coremap.h>
 #include <pt.h>
@@ -354,9 +355,8 @@ vm_fault(int faulttype, vaddr_t faultaddress)
 	    case VM_FAULT_READONLY:
 		/* Text segment pages must be readonly, so this can happen */
 		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
-		proc_remthread(curthread);
-		proc_destroy(curproc);
-		thread_exit();
+		kprintf("\n\nKilling user process for illegal access to readonly segment\n");
+		sys__exit(VM_FAULT_READONLY);
 		panic("thread_exit returned (should not happen)\n");
 		break;
 	    case VM_FAULT_READ:
@@ -493,7 +493,7 @@ pt_pagefault(int index){
 	as = proc_getas();
 
 	/* Verify if the ram is being fulled */
-	if (checkpercentageofuse() > 90){
+	if (checkpercentageofuse() > MAX_PERCENTAGE_MEMORY){
 		// Start directly with page replacement
 		paddr = pt_page_replacement(index);
 	}else{
