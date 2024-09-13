@@ -31,9 +31,7 @@ switch (faulttype) {
 	    case VM_FAULT_READONLY:
 		/* Text segment pages must be readonly, so this can happen */
 		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
-		proc_remthread(curthread);
-		proc_destroy(curproc);
-		thread_exit();
+		sys__exit(VM_FAULT_READONLY);
 		panic("thread_exit returned (should not happen)\n");
 		break;
 ...
