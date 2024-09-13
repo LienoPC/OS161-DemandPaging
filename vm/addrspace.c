@@ -281,6 +281,7 @@ int
 as_define_stack(struct addrspace *as, vaddr_t *stackptr)
 {	
 	#if OPT_PAGING
+		KASSERT(as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0);
 		as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
 		as->segs.as_stackvtop = USERSTACK;
 

@@ -132,11 +132,9 @@ get_elf_offset(struct addrspace *as, vaddr_t vaddr){
 	/* Compute virtual page address offset in the file */
 	if (vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
 		offset = (vaddr - as->segs.as_vbase1) + as->segs.text_ph.p_offset;
-		//KASSERT((offset & PAGE_FRAME) == offset);
 	}
 	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
 		offset = (vaddr - as->segs.as_vbase2) + as->segs.data_ph.p_offset;
-		//KASSERT((offset & PAGE_FRAME) == offset);
 	}
 	else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
 		offset = (off_t) -1;
