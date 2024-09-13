@@ -144,7 +144,15 @@ L'implementazione della page table è stata associata ad una gestione della memo
 1. Identifica il tipo di fault, interrompendo il processo nel caso di accesso in scrittura a pagine _read-only_
 2. Verifica a quale segmento del processo il faultaddr appartiene, per settare correttamente il read-only bit nell'inserimento della nuova entry nella tlb
 3. Viene chiamata la funzione `paddr_t pt_getframe(vaddr_t addr)` che, dato l'indirizzo virtuale di una pagina, ritorna il suo corrispettivo indirizzo fisico in memoria
-4. La funzione verifica quindi se l'entry associata al faultaddress sia valida, ritornando direttamente l'indirizzo al frame associato, altrimenti chiama la funzione di page fault `paddr_t pt_pagefault(int index)` 
+4. La funzione verifica quindi se l'entry associata al faultaddress sia valida, ritornando direttamente l'indirizzo al frame associato, altrimenti chiama la funzione di page fault `paddr_t pt_pagefault(int index)`, dato che il frame deve essere caricato in memoria
+5. Nel page fault si verifica prima di tutto se sia necessario far partire il page replacement: abbiamo deciso di settare una percentuale massima di utilizzo della memoria ram da parte dei frame del processo user, in modo da lasciare sempre disponibile una parte di memoria per il kernel. Se la ram occupata supera il threshold specificato, inizia il page replacement, richiamando la funzione `paddr_t pt_page_replacement(int dst_index)`, che sarà descritta nei paragrafi successivi. Nel caso invece in cui la memoria non sia ancora saturata, si richiama la funzione `getframe` della coremap, che ritorna l'indirizzo fisico del frame su cui sarà caricata la pagina a cui si sta cercando di accedere, che può essere caricata
+	1. Dallo SWAPFILE, nel caso in cui sia settato lo SWAP BIT, tramite l'uso delle funzioni di gestione dello spazio di swap
+ 	2. Dal file ELF, nel caso in cui lo SWAP BIT non sia settato.
+ 	3. Infine vi è il caso di allocazione di una pagina vuota su cui il processo vuole scrivere, che si verifica quando il programma cerca di accedere per la prima volta ad una pagina dello stack. In questo caso settiamo subito lo SWAP BIT
+
+Considerata la mancanza di supporto hardware nella TLB per l'uso del modify bit nella page table, non possiamo gestire dinamicamente la scrittura su SWAPFILE unicamente delle pagine che sono state modificate, per questo motivo ogni volta che si verifica un page-out (che in questo caso può verificarsi unicamente per page replacement) viene settato lo swap bit ed eseguito, nel pratico, lo swap-out della vittima (anche se appunto, questa non è stata mai modificata e potrebbe essere, teoricamente, ri-caricata direttamente dal file elf)
+
+## Gestione del File ELF
 
 ## Gestione dello Swap File
 
