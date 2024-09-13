@@ -62,7 +62,7 @@ ehi = vaddr & TLBHI_VPAGE;
 ## Coremap
 
 Un'aspetto importante della gestione della memoria riguarda la struttura per tenere traccia dei frame liberi e, di conseguenza, la loro allocazione. La necessità di allocare memoria contigua per il kernel ci ha portato a scegliere un'implementazione basata su una semplice bitmap nella struct `coremap_t`, accompagnata da un vettore `allocSize` della stessa dimensione che tiene traccia degli intervalli di frame contigui allocati (similmente a quanto fatto da dumbvm). La bitmap, mantenuta come array di caratteri, assegna 0 ad un frame occupato e 1 ad un frame libero. La struttura di coremap contiene poi il numero totale di frame in memoria (`nRamFrames`), uno spinlock per regolarne l'accesso e `last_frame`, usato nell'algoritmo che sceglie da dove partire per la ricerca di frame da usare per allocazione contigua.
-Tra i metodi più importanti identifichiamo:
+Tra le funzioni più importanti identifichiamo:
 <list>
 1. `paddr_t getfreeframe(void)`, che ritorna l'indirizzo fisico di un singolo frame allocato, richiamato dalla page table quando si vuole caricare una pagina in memoria
 2. `paddr_t getcontinuousalloc(int npages)`, che ritorna l'indirizzo fisico del primo di n-frames allocati per il kernel (-1 se non ci sono abbastanza frame liberi)
@@ -72,7 +72,7 @@ E' stata modificata anche la funzione `alloc_kpages` in modo da utilizzare la co
 
 ## Page Table
 
-Come già anticipato, la tabella delle pagine segue una struttura per-process, in cui ogni entry corrisponde ad una pagina logica dello spazio di indirizzamento virtuale del processo. Essa è gestita all'interno del file `pt.c` usando una struct definita in `addrspace.h` composta dai seguenti campi:
+Come già anticipato, la tabella delle pagine segue una struttura per-process, in cui ogni entry corrisponde ad una pagina logica dello spazio di indirizzamento virtuale del processo. La modifica alla memoria virtuale proposta necessita di cambiare anche parti delle funzioni di addresspace (contenute in `dumbvm.c` nell'implementazione originale, ma che per questo progetto sono state spostate in `addrspace.c`), dato che la struttura dello spazio di indirizzamento `struct addrspace` è stata completamente rivista. La page table è gestita quindi all'interno del file `pt.c` usando la struct definita in `addrspace.h` composta dai seguenti campi:
 1. `paddr_t *frames`: vettore che associa ad ogni entry della tabella un indirizzo fisico, corrispondente al, se presente, frame associato alla pagina logica indicizzata
 2. `unsigned char *control_bits`: vettore che associa ad ogni entry i bit di controllo, quali:
     - S, swap bit, indica se l'entry deve essere gestita usando lo spazio di swap 
@@ -154,6 +154,10 @@ Considerata la mancanza di supporto hardware nella TLB per l'uso del modify bit 
 
 ## Gestione del File ELF
 
+Componente fondamentale del demand paging è il fatto di non caricare l'intero spazio di indirizzamento del processo quando questo viene avviato, ma solo, appunto, on-demand. Questo ha richiesto fare dei piccoli cambiamenti nella sequenza di funzioni chiamate per lo startup di un processo user, soprattutto nella `load_elf`, che nella versione usata da dumbvm carica tutti i segment in memoria chiamando la funzione load_segment: nella nostra versione, invece, setuppiamo il contenuto della `struct segments` contenuta all'interno dell'addrspace del processo e accediamo successivamente al file elf per leggere le singole pagine. La lettura di una pagina si basa sulla seguente sequenza di chiamate:
+1.`get_elf_offset`: funzione che calcola l'offset fisico all'interno del file elf per la lettura. In base al segmento al quale appartiene l'indirizzo virtuale della pagina a cui vogliamo accedere, sommiamo l'offset del segmento con la posizione relativa alla vbase del segmento stesso.
+2.`load_from_elf`: a partire dall'offset ricevuto, inizializza un uio di kernel, finalizzato tramite una `VOP_READ`, per appunto caricare la pagina dal file elf all'indirizzo fisico del frame allocato
+In questo modo gestiamo il caricamento dinamico delle pagine logiche dal file elf alla memoria ram.
 ## Gestione dello Swap File
 
 Il file SWAPFILE nella root directory costituisce lo spazio di swap del sistema.
@@ -218,6 +222,23 @@ Notare l'inserimento in coda dell'indice della nuova entry nella page table in `
 
 ## Statistiche
 
+La raccolta delle statistiche è l'ultimo elemento del nostro lavoro, basata semplicemente sulla definizione di una struct statica nel file `vmstats.h` contenente tutti i campi (in questo caso, contatori) usati per tenere traccia di determinati eventi del kernel, così come indicato sui requisiti del progetto. L'accesso dall'esterno è gestito tramite le singole funzioni usate per incrementare i contatori della struttura:
+```c
+struct vmstats{
+
+    unsigned int tlb_faults;
+    unsigned int tlb_faults_with_free;
+    unsigned int tlb_faults_with_replace;
+    unsigned int tlb_invalidations;
+    unsigned int tlb_reloads;
+    unsigned int pf_zeroed;
+    unsigned int pf_disk;
+    unsigned int pf_from_elf;
+    unsigned int pf_from_swap;
+    unsigned int swapfile_writes;
+};
+```
+La struttura è inizializzata insieme al coremap bootstrap, mentre la stampa delle statistiche e la verifica della loro validità è stata inserita nella funzione `vm_shutdown`, richiamata allo spegnimento di OS161.
 ## Conclusioni
 
 Per concludere, le strutture introdotte mancano di alcuni accorgimenti, come ad esempio l'utilizzo di primitive di sincronizzazione per la page table, dato che si eseguono sempre, in questa versione di OS161, processi utente single-threaded. Nonostante l'introduzione della nuova memoria virtuale vada a peggiorare le prestazioni per i programmi utente più semplici, essa permette di gestire il caso di processo utente con memoria virtuale più grande della memoria ram e di garantire, in teoria, la mancanza di out of memory.
