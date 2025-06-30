@@ -1,221 +1,159 @@
 - [C1: Paging Project](#c1-paging-project)
-	- [Introduzione](#introduzione)
+	- [Introduction](#introduction)
 	- [TLB](#tlb)
 	- [Coremap](#coremap)
 	- [Page Table](#page-table)
 	- [On-Demand Paging](#on-demand-paging)
-	- [Gestione dello Swap File](#gestione-dello-swap-file)
+	- [Swap File Management](#swap-file-management)
 	- [Page Replacement](#page-replacement)
-	- [Statistiche](#statistiche)
-	- [Conclusioni](#conclusioni)
+	- [Statistics](#statistics)
+	- [Conclusions](#conclusions)
 
 
 # C1: Paging Project
 
-## Introduzione
+## Introduction
 
-Lo scopo di questo progetto è quello di implementare un'evoluzione della gestione di memoria virtuale (DUMBVM) che di base è utilizzata nel kernel di OS161. Nello specifico, la soluzione proposta, si basa sull'uso di una **Page Table** nella sua versione _Per-process_, implementando la possibilità di leggere le pagine dalla memoria virtuale seguendo il modello _On-Demand_, cioè quello di caricare una pagina in memoria fisica solo quando viene referenziata per la prima volta.
-Si vuole gestire poi anche il caso di riempimento della memoria fisica e intervento di un algoritmo di page-replacement (nel nostro caso, FIFO), che permetta l'esecuzione di uno userprocess anche nel caso in cui la sua memoria virtuale sia più grande della memoria RAM.
-L'accesso ai frame della memoria e l'allocazione di questi è gestita tramite una struttura apposita, una _coremap_, richiamata sia dal gestore della memoria kernel (kmalloc), sia dall'allocatore dei frame user.
-Infine, il funzionamento del demand paging e del page replacement sarà supportato dalla gestione di uno spazio di swap sul disco, tramite la definizione di un file apposito di lunghezza fissa che accoglierà i frame sottoposti a swap-out e permetterà eventualmente lo swap-in laddove necessario.
+The goal of this project is to implement an evolution of the virtual memory management (DUMBVM) used by default in the OS161 kernel. Specifically, the proposed solution is based on the use of a **Page Table** in its _Per-process_ version, implementing the ability to read pages from virtual memory following the _On-Demand_ model—loading a page into physical memory only when it is referenced for the first time.
+The project also aims to handle cases where physical memory is full by using a page-replacement algorithm (in our case, FIFO), allowing user processes to run even when their virtual memory is larger than RAM.
+Frame access and allocation are handled using a dedicated structure called a _coremap_, which is used by both the kernel memory manager (kmalloc) and the user frame allocator.
+Finally, demand paging and page replacement are supported by managing swap space on disk, using a fixed-length file to store swapped-out frames and enabling swap-in when necessary.
 
 ## TLB
 
-Ogni volta che un processo user fa accesso ad un indirizzo virtuale non contenuto in una pagina mappata in TLB (TLB miss), viene scatenata una trap (il cui punto di aggancio è la funzione `mips_trap`, definita in trap.c) che delega il compito di gestire il TLB miss alla funzione `vm_fault` (pt.c) a cui viene passato il codice del fault (`faulttype`) e l'indirizzo virtuale che ha causato il miss (`faultaddress`). L'obbiettivo ultimo di `vm_fault` è quello di inserire nella TLB una nuova entry che mappi il `faultaddress` ad un indirizzo in memoria fisica.
-Le operazioni svolte a questo proposito sono:
+Each time a user process accesses a virtual address not mapped in the TLB (TLB miss), a trap is triggered (handled by the `mips_trap` function in trap.c), delegating the TLB miss management to the `vm_fault` function (in pt.c), which receives the fault code (`faulttype`) and the virtual address that caused the miss (`faultaddress`). The ultimate goal of `vm_fault` is to insert a new entry into the TLB mapping `faultaddress` to a physical memory address.
+The steps involved are:
 
-1. Controllare il tipo di fault e, nel caso in cui il processo user abbia tentato di accedere ad un indirizzo del text segment (accessibile in sola lettura), terminarlo:
+1. Check the fault type. If the user process tries to access a text segment address (read-only), it is terminated:
 
 ```c
 switch (faulttype) {
-	    case VM_FAULT_READONLY:
-		/* Text segment pages must be readonly, so this can happen */
-		DEBUG(DB_VM, "VM_FAULT_READONLY\n");
-		sys__exit(VM_FAULT_READONLY);
-		panic("thread_exit returned (should not happen)\n");
-		break;
+    case VM_FAULT_READONLY:
+        /* Text segment pages must be readonly, so this can happen */
+        DEBUG(DB_VM, "VM_FAULT_READONLY\n");
+        sys__exit(VM_FAULT_READONLY);
+        panic("thread_exit returned (should not happen)\n");
+        break;
 ...
 ```
-2. Eseguire controlli sulla correttezza e la coerenza dello spazio di indirizzamento del processo user (in caso di fallimento di un `KASSERT` il kernel viene terminato)
-3. Controllare il segmento dell'ELF a cui appartiene il `faultaddress`. Se l'indirizzo appartiene al text segment, il dirty bit della nuova entry della TLB sarà settato a 0, altrimenti a 1. 
-4. Chiamare la funzione `pt_getframe`, a cui viene passato il `faultaddress` e che, in seguito ad una serie di chiamate a funzioni di gestione della page table (che attivano i meccanismi di demand paging e page replacement in caso di necessità), ritorna l'indirizzo del nuovo frame associato al `faultaddress`. 
-5. Aggiornare la TLB tramite la funzione `tlb_loadentry`, a cui vengono passati il `faultaddress`, l'indirizzo fisico a cui associarlo (parametro `paddr`) e un flag che indica l'appartenenza di `faultaddress` al text segment del processo user (`readonly`). 
+2. Perform checks on the validity and consistency of the user process's address space (the kernel terminates on a failed `KASSERT`)
+3. Check which ELF segment the `faultaddress` belongs to. If it's the text segment, the dirty bit in the TLB entry is set to 0; otherwise, it is set to 1.
+4. Call the `pt_getframe` function with the `faultaddress`. This function, via a series of page table management calls (which activate demand paging and page replacement if needed), returns the physical frame address associated with the `faultaddress`.
+5. Update the TLB using the `tlb_loadentry` function, which takes the `faultaddress`, the physical address (`paddr`), and a flag indicating whether `faultaddress` belongs to the text segment (`readonly`).
 
-La funzione `tlb_loadentry` nel dettaglio si occupa di:
-<list>
-1. Trovare una entry libera nella TLB tramite la funzione `tlb_findfree` o, in caso la TLB sia piena, selezionare una vittima tramite la funzione `tlb_get_rr_victim`, che implementa un semplice algoritmo round-robin. 
-2. Preparare la nuova entry da inserire nella TLB, settando i bit valid e dirty tramite le maschere `TLB_VALID` e `TLB_DIRTY`:
+The `tlb_loadentry` function does the following:
+1. Finds a free TLB entry using `tlb_findfree`, or selects a victim via `tlb_get_rr_victim` (a simple round-robin algorithm) if the TLB is full.
+2. Prepares the new TLB entry, setting the valid and dirty bits using `TLB_VALID` and `TLB_DIRTY` masks:
 
 ```c
 ehi = vaddr & TLBHI_VPAGE;
-	paddr = paddr & TLBLO_PPAGE;
-	/* Set dirty bit only if vpage does not belong to the elf's text segment */
-	if (readonly)
-		elo = paddr | TLBLO_VALID;
-	else
-		elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
+paddr = paddr & TLBLO_PPAGE;
+/* Set dirty bit only if vpage does not belong to the elf's text segment */
+if (readonly)
+    elo = paddr | TLBLO_VALID;
+else
+    elo = paddr | TLBLO_DIRTY | TLBLO_VALID;
 ```
-3. Inserire la nuova entry nella TLB tramite la funzione `tlb_write`.
+3. Inserts the new entry into the TLB using the `tlb_write` function.
 
 ## Coremap
 
-Un'aspetto importante della gestione della memoria riguarda la struttura per tenere traccia dei frame liberi e, di conseguenza, la loro allocazione. La necessità di allocare memoria contigua per il kernel ci ha portato a scegliere un'implementazione basata su una semplice bitmap nella struct `coremap_t`, accompagnata da un vettore `allocSize` della stessa dimensione che tiene traccia degli intervalli di frame contigui allocati (similmente a quanto fatto da dumbvm). La bitmap, mantenuta come array di caratteri, assegna 0 ad un frame occupato e 1 ad un frame libero. La struttura di coremap contiene poi il numero totale di frame in memoria (`nRamFrames`), uno spinlock per regolarne l'accesso e `last_frame`, usato nell'algoritmo che sceglie da dove partire per la ricerca di frame da usare per allocazione contigua.
-Tra le funzioni più importanti identifichiamo:
-<list>
-1. `paddr_t getfreeframe(void)`, che ritorna l'indirizzo fisico di un singolo frame allocato, richiamato dalla page table quando si vuole caricare una pagina in memoria
-2. `paddr_t getcontinuousalloc(int npages)`, che ritorna l'indirizzo fisico del primo di n-frames allocati per il kernel (-1 se non ci sono abbastanza frame liberi)
-3. Le relative funzioni di de-allocazione `releaseframe` e `releasecontiguousalloc`
+An important aspect of memory management concerns the structure used to keep track of free frames and their allocation. The need to allocate contiguous memory for the kernel led us to choose an implementation based on a simple bitmap in the `coremap_t` struct, accompanied by an `allocSize` vector of the same size that tracks contiguous frame intervals allocated (similarly to what dumbvm does). The bitmap, maintained as a character array, assigns 0 to an occupied frame and 1 to a free frame. The coremap structure also contains the total number of frames in memory (`nRamFrames`), a spinlock to regulate access, and `last_frame`, used by the algorithm to determine where to start the search for contiguous frame allocation.
 
-E' stata modificata anche la funzione `alloc_kpages` in modo da utilizzare la coremap se già inizializzata, altrimenti utilizzando la `ram_stealmem` (solo durante la fase di startup del sistema).
+The most important functions include:
+1. `paddr_t getfreeframe(void)`, which returns the physical address of a single allocated frame, called by the page table when a page needs to be loaded into memory.
+2. `paddr_t getcontinuousalloc(int npages)`, which returns the physical address of the first of n allocated frames for the kernel (-1 if there are not enough free frames).
+3. The related deallocation functions `releaseframe` and `releasecontiguousalloc`.
 
+The function `alloc_kpages` has also been modified to use the coremap if already initialized; otherwise, it uses `ram_stealmem` (only during system startup).
 
 ## Page Table
 
-Come già anticipato, la tabella delle pagine segue una struttura per-process, in cui ogni entry corrisponde ad una pagina logica dello spazio di indirizzamento virtuale del processo. La modifica alla memoria virtuale proposta necessita di cambiare anche parti delle funzioni di addresspace (contenute in `dumbvm.c` nell'implementazione originale, ma che per questo progetto sono state spostate in `addrspace.c`), dato che la struttura dello spazio di indirizzamento `struct addrspace` è stata completamente rivista. La page table è gestita quindi all'interno del file `pt.c` usando la struct definita in `addrspace.h` composta dai seguenti campi:
-1. `paddr_t *frames`: vettore che associa ad ogni entry della tabella un indirizzo fisico, corrispondente al, se presente, frame associato alla pagina logica indicizzata
-2. `unsigned char *control_bits`: vettore che associa ad ogni entry i bit di controllo, quali:
-    - S, swap bit, indica se l'entry deve essere gestita usando lo spazio di swap 
-    - V, valid bit, indica se l'entry è valida, cioè se il frame è presente in memoria. 
-    - E' stata predisposta anche la possibilità di usare il dirty bit e il reference bit, ma a causa della mancanza di supporto hardware associato, in questa versione della memoria virtuale non sono utilizzati.
-3. `int n_entry`: inizializzata alla creazione della PT, indica il numero di entry nella page table e corrisponde al numero di pagine logiche del processo in esecuzione
-4. `vnode *swapfile`: mantiene un riferimento al vnode dello swapfile, che viene tenuto sempre aperto durante l'esecuzione del processo
-5. `segments segs`: variabile del tipo `struct segments` definita in `segments.h`, che mantiene tutte le informazioni riguardo lo spazio di memoria virtuale del processo in esecuzione e il suo file elf; è composta dai seguenti campi:
-   - `vnode *progelf`: riferimento al vnode dell'eseguibile del processo in esecuzione
-   - `text_ph e data_ph`: program headers delle sezioni usati per la lettura delle pagine nel demand paging (in questa versione si supporta unicamente la presenza di due sezioni più lo stack)
-   - `as_vbase1 e as_vbase2`: primi indirizzi virtuali delle due sezioni della memoria user, usati per la mappatura con gli indici della page table
-   - `as_npages1 e as_npages2`: numero di pagine delle due sezioni
-   - `as_stackvbase, as_stackvtop`: rispettivamente l'ultimo indirizzo virtuale valido dello stack e il primo indirizzo valido (lo stack cresce dall'alto verso il basso). In questa versione (così come in dumbvm) usiamo uno stack a lunghezza fissa
-   - `as_stackptbase`: primo indirizzo virtuale dello stack mappato 'in basso' nella page table
-6. `pt_fifo_t *page_queue`: campo contenente la coda FIFO usata nel page replacement
+As mentioned earlier, the page table follows a per-process structure, where each entry corresponds to a logical page of the process’s virtual address space. The proposed virtual memory modification also required changes to parts of the address space functions (originally in `dumbvm.c`, but moved to `addrspace.c` for this project), as the `struct addrspace` was completely revised. The page table is managed in `pt.c` using the struct defined in `addrspace.h`, consisting of the following fields:
+1. `paddr_t *frames`: an array associating each page table entry with a physical address, corresponding to the frame if present.
+2. `unsigned char *control_bits`: an array associating each entry with control bits:
+   - S, swap bit, indicates if the entry should be handled using the swap space.
+   - V, valid bit, indicates if the entry is valid, i.e., if the frame is present in memory.
+   - Possibility for dirty and reference bits is included, but not used due to lack of hardware support.
+3. `int n_entry`: initialized during PT creation, indicates the number of entries in the page table, corresponding to the number of logical pages of the process.
+4. `vnode *swapfile`: keeps a reference to the vnode of the swap file, which is kept open during the process execution.
+5. `segments segs`: a variable of type `struct segments` defined in `segments.h`, maintaining all information about the process’s virtual memory space and its ELF file; includes:
+   - `vnode *progelf`: reference to the vnode of the process executable.
+   - `text_ph` and `data_ph`: program headers of sections used for reading pages in demand paging (only two sections plus stack are supported in this version).
+   - `as_vbase1` and `as_vbase2`: base virtual addresses of the two user memory sections, used for mapping to page table indices.
+   - `as_npages1` and `as_npages2`: number of pages in the two sections.
+   - `as_stackvbase`, `as_stackvtop`: respectively the last valid virtual address and first valid address of the stack (stack grows top-down). We use a fixed-length stack.
+   - `as_stackptbase`: first virtual address of the stack mapped “from below” in the page table.
+6. `pt_fifo_t *page_queue`: contains the FIFO queue used for page replacement.
 
-A parte i principali metodi di accesso e utilizzo della page table, è interessante dare un'occhiata al processo di traduzione da indirizzo virtuale del processo a indice della page table (e viceversa), gestito dai metodi statici `static int get_pt_index(struct addrspace *as, vaddr_t vaddr)` e `static vaddr_t get_vaddr_from_index(struct addrspace *as, int index)`:
-
-```c
-static int
-get_pt_index(struct addrspace *as, vaddr_t vaddr){
-	int index = -1;
-	if(vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
-		index = (vaddr - as->segs.as_vbase1)/PAGE_SIZE;
-	}
-	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
-		index = (vaddr - as->segs.as_vbase2)/PAGE_SIZE + as->segs.as_npages1;
-	}else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
-		index = (as->segs.as_stackptbase + (as->segs.as_stackvtop - vaddr))/PAGE_SIZE;
-	}else{
-		// Invalid vaddr
-		index = -1;
-	}
-	return index;
-}
-
-```
-Si assegnano cioè progressivamente le prime `as_npages1` entry della pt al primo segmento, a partire poi dall'indice `as_npages1` vengono assegnate le pagine del secondo segmento e infine quelle dello stack, dove `as_stackptbase`, definito nella funzione `as_define_stack`, rappresenta il primo indirizzo dello stack, che è stato capovolto all'interno della PT (cresce, cioè, dal basso verso l'alto). Questo, ovviamente, per evitare di mappare nella PT una "regione vuota" tra i segmenti e lo stack.
-
-```c
-int
-as_define_stack(struct addrspace *as, vaddr_t *stackptr)
-{	
-	#if OPT_PAGING
-		as->segs.as_stackvbase = USERSTACK - PAGING_STACKPAGES * PAGE_SIZE;
-		as->segs.as_stackvtop = USERSTACK;
-
-		if (as->segs.as_vbase1 != 0 && as->segs.as_vbase2 != 0){
-			/* Already defined the other regions, I can map the stack in the PT */
-			as->segs.as_stackptbase = as->segs.as_npages1*PAGE_SIZE + as->segs.as_npages2*PAGE_SIZE;
-		}
-
-		/* Initial user-level stack pointer */
-		*stackptr = as->segs.as_stackvtop;
-	#else
-		KASSERT(as->as_stackpbase != 0);
-
-		*stackptr = USERSTACK;
-	#endif
-
-	return 0;
-}
-
-```
+The translation from a process’s virtual address to a page table index (and vice versa) is managed by the static functions `static int get_pt_index(struct addrspace *as, vaddr_t vaddr)` and `static vaddr_t get_vaddr_from_index(struct addrspace *as, int index)`.
 
 ## On-Demand Paging
 
-L'implementazione della page table è stata associata ad una gestione della memoria del tipo "On-Demand", per cui le pagine dello spazio di indirizzamento logico di un processo sono caricate in memoria solo dopo essere state referenziate dal programma. Questo vuol dire che all'inizio la page table non ha riferimenti a frame allocati in memoria, per cui la prima istruzione parte con un tlb miss (ricevuto dalla funzione `vm_fault`) che segue, quindi, il seguente iter:
-1. Identifica il tipo di fault, interrompendo il processo nel caso di accesso in scrittura a pagine _read-only_
-2. Verifica a quale segmento del processo il faultaddr appartiene, per settare correttamente il read-only bit nell'inserimento della nuova entry nella tlb
-3. Viene chiamata la funzione `paddr_t pt_getframe(vaddr_t addr)` che, dato l'indirizzo virtuale di una pagina, ritorna il suo corrispettivo indirizzo fisico in memoria
-4. La funzione verifica quindi se l'entry associata al faultaddress sia valida, ritornando direttamente l'indirizzo al frame associato, oppure chiamando la funzione di page fault `paddr_t pt_pagefault(int index)`
-5. Nel page fault si verifica prima di tutto se sia necessario far partire il page replacement: abbiamo deciso di settare una percentuale massima di utilizzo della memoria ram da parte dei frame del processo user, in modo da lasciare sempre disponibile una parte di memoria per il kernel. Se la ram occupata supera il threshold specificato, inizia il page replacement, richiamando la funzione `paddr_t pt_page_replacement(int dst_index)`, che sarà descritta nei paragrafi successivi. Nel caso invece in cui la memoria non sia ancora saturata, si richiama la funzione `getframe` della coremap, che ritorna l'indirizzo fisico del frame su cui sarà caricata la pagina a cui si sta cercando di accedere, che può essere caricata
-	1. Dallo SWAPFILE, nel caso in cui sia settato lo SWAP BIT, tramite l'uso delle funzioni di gestione dello spazio di swap
- 	2. Dal file ELF, nel caso in cui lo SWAP BIT non sia settato.
- 	3. Infine vi è il caso di allocazione di una pagina vuota su cui il processo vuole scrivere, che si verifica quando il programma cerca di accedere per la prima volta ad una pagina dello stack. In questo caso settiamo subito lo SWAP BIT
+The page table implementation is coupled with an On-Demand memory management, meaning that pages from a process’s logical address space are only loaded into memory when referenced. Initially, the page table has no references to frames, and the first instruction causes a TLB miss (handled by `vm_fault`), which follows this process:
+1. Identify the fault type, terminating the process for write access to read-only pages.
+2. Determine the process segment the fault address belongs to, to set the TLB entry’s read-only bit.
+3. Call `paddr_t pt_getframe(vaddr_t addr)`, which returns the corresponding physical address.
+4. The function checks if the entry is valid. If so, it returns the frame’s address; otherwise, it calls `paddr_t pt_pagefault(int index)`.
+5. On a page fault:
+   - If memory use exceeds a defined RAM threshold, the page replacement starts via `paddr_t pt_page_replacement(int dst_index)`.
+   - Otherwise, a new frame is allocated using `getframe` from the coremap, and the page is loaded either:
+     1. From the SWAPFILE (if the SWAP BIT is set),
+     2. From the ELF file (if the SWAP BIT is not set),
+     3. Or initialized as a blank page (e.g., stack access), in which case the SWAP BIT is immediately set.
 
-Considerata la mancanza di supporto hardware per l'uso del modify bit nella page table, non possiamo condizionare la scrittura su SWAPFILE (in un page-out) al fatto che la pagina sia stata modificata, per questo motivo ogni volta che si verifica un page-out (che in questo caso può verificarsi unicamente per page replacement) viene settato lo swap bit ed eseguito, nel pratico, lo swap-out della vittima (anche se appunto, questa non è stata mai modificata e potrebbe essere, teoricamente, ri-caricata direttamente dal file elf).
+Since we lack hardware support for the modify bit, swap-out is always performed on a page replacement, even if the page wasn’t modified.
 
-## Gestione del File ELF
+## ELF File Management
 
-Componente fondamentale del demand paging è il fatto di non caricare l'intero spazio di indirizzamento del processo quando questo viene avviato, ma solo, appunto, on-demand. Questo ha richiesto fare dei piccoli cambiamenti nella sequenza di funzioni chiamate per lo startup di un processo user, soprattutto nella `load_elf`, che nella versione usata da dumbvm carica tutti i segment in memoria chiamando la `load_segment`: nella nostra versione, invece, inizializziamo il contenuto della `struct segments` contenuta all'interno dell'addrspace del processo e accediamo successivamente al file elf per leggere le singole pagine. La lettura di una pagina si basa sulla seguente sequenza di chiamate:
-1. `get_elf_offset`: funzione che calcola l'offset fisico all'interno del file elf per la lettura. In base al segmento al quale appartiene l'indirizzo virtuale della pagina a cui vogliamo accedere, sommiamo l'offset del segmento con la posizione relativa alla vbase del segmento stesso.
-```c
-static off_t
-get_elf_offset(struct addrspace *as, vaddr_t vaddr){
-	off_t offset;
-	/* Compute virtual page address offset in the file */
-	if (vaddr >= as->segs.as_vbase1 && vaddr < (as->segs.as_vbase1 + PAGE_SIZE*as->segs.as_npages1)) {
-		offset = (vaddr - as->segs.as_vbase1) + as->segs.text_ph.p_offset;
-	}
-	else if (vaddr >= as->segs.as_vbase2 && vaddr < (as->segs.as_vbase2 + PAGE_SIZE*as->segs.as_npages2)) {
-		offset = (vaddr - as->segs.as_vbase2) + as->segs.data_ph.p_offset;
-	}
-	else if (vaddr >= as->segs.as_stackvbase && vaddr < as->segs.as_stackvtop) {
-		offset = (off_t) -1;
-	}else{
-		offset = (off_t) -1;
-	}
-	return offset;
-}
-```
-2. `load_from_elf`: a partire dall'offset ricevuto, inizializza un uio di kernel, finalizzato tramite una `VOP_READ`, per appunto caricare la pagina dal file elf all'indirizzo fisico del frame allocato.
-In questo modo gestiamo il caricamento dinamico delle pagine logiche dal file elf alla memoria ram.
-## Gestione dello Swap File
+A crucial component of demand paging is not loading the entire address space at process startup. Instead, pages are loaded on-demand. This required small changes in the function sequence during process startup, especially in `load_elf`. Instead of loading all segments with `load_segment`, we now initialize the `struct segments` inside the process’s addrspace and read individual pages later.
 
-Il file SWAPFILE nella root directory costituisce lo spazio di swap del sistema.
-Nel file swapfile.c (e header swapfile.h) sono definite le funzioni che permettono di interfacciarsi con lo swap file, offrendo il supporto per le operazioni di page out, page in e, di conseguenza, page replacement. 
-Illustriamo qui come viene gestito lo swap file perché sarà utile per comprendere l'implementazione del page replacement. 
+Page loading involves:
+1. `get_elf_offset`: calculates the physical offset in the ELF file to read from, based on the segment the virtual address belongs to.
+2. `load_from_elf`: using the offset, sets up a kernel uio and calls `VOP_READ` to load the page from the ELF file into the allocated frame.
 
-La dimensione massima dello spazio di swap è facilmente impostabile da swapfile.h tramite la costante `MAX_SWAP_SPACE`.
+This allows dynamic loading of logical pages from the ELF file into RAM.
 
-Tutte le operazioni di lettura e scrittura su swap file vengono gestite tramite `struct iovec` e `struct uio`, inizializzate per gestire l'I/O in spazio di kernel (tramite la funzione `uio_kinit`).
-Lettura e scrittura vengono rispettivamente eseguite mediante le macro `VOP_READ` e `VOP_WRITE`.
+# Swap File Management
 
-Prima di procedere alla descrizione delle funzioni offerte da swapfile.c è opportuno notare che la dimensione di una pagina scritta sullo swap file durante un page out sarà di 4100 bytes invece di 4096 (`PAGE_SIZE`), in quanto il contenuto della pagina viene preceduto dal suo indirizzo virtuale (di tipo `vaddr_t`, 4 bytes), al fine di identificare la pagina durante un page in.
+The SWAPFILE in the root directory constitutes the system's swap space.
+In the `swapfile.c` file (and header `swapfile.h`), functions are defined to interface with the swap file, supporting page out, page in, and therefore page replacement operations.
+We describe here how the swap file is managed because it is useful for understanding the implementation of page replacement.
 
-Le funzioni definite per il supporto alle operazioni su swap file sono:
-1. `off_t sf_getsize(void)`: permette di ottenere la dimensione attuale dello swap file. Utilizza la macro `VOP_STAT` per ottenere statistiche relative al file e da esse estrae e ritorna la dimensione (campo `st_size` della `struct stat`).
-2. `bool is_sf_full(void)`: ritorna `true` se lo spazio di swap è stato saturato, `false` altrimenti. 
-3. `bool sf_can_fit_page(void)`: ritorna `true` se lo swap file può accogliere almeno un'altra pagina (4096 + 4 bytes), altrimenti ritorna `false`.
-4. `int sf_pagein(vaddr_t vaddr, paddr_t paddr)`: legge la pagina identificata dall'indirizzo virtuale `vaddr` e la scrive all'indirizzo fisico `paddr`. Ritorna codici di errore specifici se lo swapfile è vuoto o se la pagina non viene trovata.
-5. `void sf_pageout(vaddr_t vaddr, paddr_t paddr, off_t offset)`: scrive il contenuto del frame all'indirizzo fisico `paddr` (il cui corrispettivo indirizzo virtuale è `vaddr`, che costituisce i 4 bytes scritti prima del contenuto della pagina) su swap file. `offset` serve per distinguere tra un'operazione di append e una di sovrascrittura, motivo per cui deve essere allineato a 4100 bytes. In caso di append, il kernel va in panic se non c'è sufficiente spazio di swap libero per eseguire l'operazione.
-6. `void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr)`: offre il supporto per il page replacement su swap file. Come prima cosa, legge da swap file la pagina identificata dall'indirizzo virtuale `dst_vaddr` (fallendo un `KASSERT` nel caso in cui non venga trovata) e la salva in un buffer temporaneo. Dopo di che, chiama `sf_pageout` per fare page out della pagina selezionata come vittima dal page replacement, con indirizzo virtuale `vic_vaddr` e fisico `vic_paddr`. Infine, copia il contenuto del buffer temporaneo nel frame destinazione all'indirizzo `dst_frame`, dopo averlo azzerato. È importante notare che questa funzione permette, nel caso di replacement, di non eseguire un append, ma di sostituire su swap file i dati della pagina caricata con quelli della vittima. (vedi il punto 5 per maggiori dettagli). Per questo motivo, dopo la sua esecuzione la dimensione del file sarà inalterata.
+The maximum size of the swap space can be easily set from `swapfile.h` via the constant `MAX_SWAP_SPACE`.
 
-## Page Replacement
-Il page replacement viene gestito mediante un algoritmo FIFO. La coda usata dall'algoritmo è `pt_fifo_t`, definita come ADT (Abstract Data Type) insieme alla sua interfaccia nel file pt_fifo.h e la cui implementazione si trova nel file pt_fifo.c.
-La `struct addrspace` contiene il campo `pt_fifo_t *page_queue`, utilizzato per tenere traccia delle pagine mappate nella page table.
-Ci limiteremo ad elencare le funzioni di interfaccia della struttura dati senza soffermarci sui particolari della sua implementazione, non presentando particolari variazioni rispetto alle classiche implementazioni che si trovano in letteratura:
-- `pt_fifo_t *pt_fifo_init(void)`: inizializza la coda.
-- `void pt_fifo_push_back(pt_fifo_t *fifo, int pt_index)`: aggiunge un elemento al fondo della coda. 
-- `int pt_fifo_pop_front(pt_fifo_t *fifo)`: rimuove l'elemento in testa alla coda.
-- `void pt_fifo_pop(pt_fifo_t *fifo, int pt_index)`: rimuove l'elemento specificato dalla coda. `pt_index` non è la posizione dell'elemento in coda, ma il valore del campo `pt_index` di `node_t` (elemento della coda) da ricercare e rimuovere.  
-- `void pt_fifo_free(pt_fifo_t *fifo)`: libera la memoria allocata per la coda.
+All read and write operations to the swap file are handled via `struct iovec` and `struct uio`, initialized to handle kernel space I/O (via the `uio_kinit` function).
+Reading and writing are performed using the macros `VOP_READ` and `VOP_WRITE` respectively.
 
-Contestualmente all'aggiunta e alla rimozione di entry nella page table, viene rispettivamente inserito o rimosso dalla coda l'indice di tale entry, in modo tale che la `page_queue` tenga traccia delle sole pagine attualmente presenti nella page table, mediante l'indice a cui si trovano.
+Before proceeding with the function descriptions provided by `swapfile.c`, it is important to note that a page written to the swap file during a page out operation will be 4100 bytes in size instead of 4096 (`PAGE_SIZE`), as the page content is preceded by its virtual address (type `vaddr_t`, 4 bytes), in order to identify the page during a page in.
 
-La funzione `static paddr_t pt_page_replacement(int dst_index)`, definita in pt.c e a cui viene passato l'indice associato all'indirizzo virtuale della pagina da caricare in memoria (vedi [Page Table](#page-table) per i dettagli sulla traduzione indirizzo virtuale - indice in PT) si occupa della gestione del page replacement:
-1. Se `as->page_queue` non è vuota, rimuove l'elemento in testa (`pt_fifo_pop_front`), ottenendone l'indice nella page table: la pagina corrispondente sarà la vittima da rimpiazzare. Se la coda è vuota, va in `panic("Out of memory")`.   
-2. Chiama la funzione `pt_invalid_entry` passando l'indice della vittima nella page table. Tale funzione si occupa di invalidare l'entry sia nella page table che nella TLB e di settarne lo swap bit:
+Defined functions for swap file operations are:
+1. `off_t sf_getsize(void)`: gets the current size of the swap file using `VOP_STAT` to retrieve file stats, and returns the size (`st_size` field of `struct stat`).
+2. `bool is_sf_full(void)`: returns `true` if the swap space is full, `false` otherwise.
+3. `bool sf_can_fit_page(void)`: returns `true` if the swap file can accommodate at least one more page (4096 + 4 bytes), otherwise `false`.
+4. `int sf_pagein(vaddr_t vaddr, paddr_t paddr)`: reads the page identified by virtual address `vaddr` and writes it to physical address `paddr`. Returns specific error codes if the swap file is empty or the page is not found.
+5. `void sf_pageout(vaddr_t vaddr, paddr_t paddr, off_t offset)`: writes the contents of the frame at physical address `paddr` (corresponding virtual address is `vaddr`, written before the page content) to the swap file. `offset` distinguishes between append and overwrite, and must be aligned to 4100 bytes. In case of append, the kernel panics if there's insufficient swap space.
+6. `void sf_replacepage(vaddr_t vic_vaddr, vaddr_t dst_vaddr, paddr_t vic_paddr)`: supports swap file-based page replacement. It first reads from swap file the page identified by `dst_vaddr`, asserting failure if not found, and stores it in a buffer. Then calls `sf_pageout` to page out the victim page (identified by `vic_vaddr` and `vic_paddr`). Finally, it copies the buffer's content to the destination frame after zeroing it. This avoids file append, preserving the file size.
+
+# Page Replacement
+
+Page replacement is managed via a FIFO algorithm. The queue used by the algorithm is `pt_fifo_t`, defined as an ADT in `pt_fifo.h` and implemented in `pt_fifo.c`.
+The `struct addrspace` contains a `pt_fifo_t *page_queue` field used to track mapped pages in the page table.
+Interface functions of the data structure include:
+- `pt_fifo_t *pt_fifo_init(void)`: initializes the queue.
+- `void pt_fifo_push_back(pt_fifo_t *fifo, int pt_index)`: adds an element to the end of the queue.
+- `int pt_fifo_pop_front(pt_fifo_t *fifo)`: removes the front element of the queue.
+- `void pt_fifo_pop(pt_fifo_t *fifo, int pt_index)`: removes a specific element by its `pt_index` (not its position in queue).
+- `void pt_fifo_free(pt_fifo_t *fifo)`: frees allocated memory for the queue.
+
+When page table entries are added or removed, the corresponding index is respectively inserted or removed from the queue, so `page_queue` tracks only the pages currently present in the page table.
+
+The function `static paddr_t pt_page_replacement(int dst_index)` defined in `pt.c` manages the page replacement process:
+1. If `as->page_queue` is not empty, removes the head (`pt_fifo_pop_front`) and retrieves the page table index, identifying the victim page. If empty, it panics with "Out of memory".
+2. Calls `pt_invalid_entry` with the victim's page table index to invalidate it and set the swap bit:
 ```c
 static void
 pt_invalid_entry(struct addrspace *as, int index){
-	/* Perform the page-out operations */
 	as->control_bits[index] &= ~PT_VALID_BIT;
 	if(!(as->control_bits[index] & PT_SWAP_BIT)) {
 		as->control_bits[index] |= PT_SWAP_BIT;
@@ -223,27 +161,24 @@ pt_invalid_entry(struct addrspace *as, int index){
 	tlb_invalid_entry(get_vaddr_from_index(as, index));
 }
 ```
-3. Se lo swap bit della pagina da caricare in memoria è settato (ovvero la pagina da caricare è stata scritta sullo swap file), chiama la funzione `sf_replacepage` (vedi [Gestione dello Swap File](#gestione-dello-swap-file) per maggiori dettagli), terminando così la procedura di page replacement. Altrimenti, la pagina va letta e caricata dal file elf: esegue prima page out della vittima tramite `sf_pageout` e poi carica la pagina dall'elf.
-4. Ritorna l'indirizzo fisico del frame in cui è stata caricata la pagina.
+3. If the page to be loaded has its swap bit set (i.e., it's on the swap file), it calls `sf_replacepage`. Otherwise, the page is read and loaded from the ELF file: it pages out the victim with `sf_pageout` and loads the new page from ELF.
+4. Returns the physical address of the frame where the page was loaded.
 
-L'aggiornamento della page table in seguito al page replacement viene finalizzato al ritorno di `pt_pagefault` in `pt_getframe`:
+The page table is updated after replacement in `pt_getframe` at the return from `pt_pagefault`:
 ```c
-/* PAGE FAULT: frame not in memory */
-		paddr = pt_pagefault(index);
-		/* update the PT */
-		as->frames[index] = paddr;
-		/* now the pt entry is valid */ 
-		as->control_bits[index] |= PT_VALID_BIT;
-		pt_fifo_push_back(as->page_queue, index);
+paddr = pt_pagefault(index);
+as->frames[index] = paddr;
+as->control_bits[index] |= PT_VALID_BIT;
+pt_fifo_push_back(as->page_queue, index);
 ```
-Notare l'inserimento in coda dell'indice della nuova entry nella page table in `as->page_queue`.
 
-## Statistiche
+Note the index insertion into `as->page_queue` for the new page table entry.
 
-La raccolta delle statistiche è l'ultimo elemento del nostro lavoro, basata semplicemente sulla definizione di una struct statica nel file `vmstats.h` contenente tutti i campi (in questo caso, contatori) usati per tenere traccia di determinati eventi del kernel, così come indicato sui requisiti del progetto. L'accesso dall'esterno è gestito tramite le singole funzioni usate per incrementare i contatori della struttura:
+# Statistics
+
+Statistics collection is the final element, simply based on defining a static struct in `vmstats.h` containing all fields (counters) to track specific kernel events, as required by the project. External access is managed via individual functions that increment the structure's counters:
 ```c
 struct vmstats{
-
     unsigned int tlb_faults;
     unsigned int tlb_faults_with_free;
     unsigned int tlb_faults_with_replace;
@@ -256,7 +191,8 @@ struct vmstats{
     unsigned int swapfile_writes;
 };
 ```
-La struttura è inizializzata insieme al coremap bootstrap, mentre la stampa delle statistiche e la verifica della loro validità è stata inserita nella funzione `vm_shutdown`, richiamata allo spegnimento di OS161.
-## Conclusioni
+The structure is initialized during the coremap bootstrap, and statistics printing and validation are added to the `vm_shutdown` function, called on OS161 shutdown.
 
-Per concludere, le strutture introdotte mancano di alcuni accorgimenti, come ad esempio l'utilizzo di primitive di sincronizzazione per la page table, dato che si eseguono sempre, in questa versione di OS161, processi utente single-threaded. Nonostante l'introduzione della nuova memoria virtuale vada a peggiorare le prestazioni per i programmi utente più semplici, essa permette di gestire il caso di processo utente con memoria virtuale più grande della memoria ram e di garantire, in teoria, la mancanza di out of memory.
+# Conclusions
+
+To conclude, the introduced structures lack certain improvements, like synchronization primitives for the page table, which isn't an issue here due to the single-threaded user process assumption. Although this new virtual memory implementation can degrade performance for simple user programs, it allows user processes with virtual memory larger than RAM to run and ensures, in theory, no out-of-memory conditions.
