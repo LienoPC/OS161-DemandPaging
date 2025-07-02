@@ -196,3 +196,7 @@ The structure is initialized during the coremap bootstrap, and statistics printi
 # Conclusions
 
 To conclude, the introduced structures lack certain improvements, like synchronization primitives for the page table, which isn't an issue here due to the single-threaded user process assumption. Although this new virtual memory implementation can degrade performance for simple user programs, it allows user processes with virtual memory larger than RAM to run and ensures, in theory, no out-of-memory conditions.
+
+## Team
+[Alberto Cagnazzo](https://github.com/LienoPC)
+[Giulio Arecco](https://github.com/giulio-arecco)
