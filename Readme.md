@@ -207,4 +207,4 @@ To conclude, the introduced structures lack certain improvements, like synchroni
 The original code in this repository is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
 
 **Third-Party Code:** 
-This repository includes third-party libraries and code (the OS161 kernel code). These files remain licensed under their respective original terms and retain their original copyright notices.
+This repository includes third-party code (the OS161 kernel code). These files remain licensed under their respective original terms and retain their original copyright notices.
