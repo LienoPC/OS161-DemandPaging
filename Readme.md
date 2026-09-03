@@ -1,4 +1,4 @@
-- [C1: Paging Project](#c1-paging-project)
+- [Paging Project](#c1-paging-project)
 	- [Introduction](#introduction)
 	- [TLB](#tlb)
 	- [Coremap](#coremap)
@@ -8,6 +8,8 @@
 	- [Page Replacement](#page-replacement)
 	- [Statistics](#statistics)
 	- [Conclusions](#conclusions)
+ 	- [Team](#team)
+  	- [License](#license) 
 
 
 # C1: Paging Project
@@ -200,3 +202,9 @@ To conclude, the introduced structures lack certain improvements, like synchroni
 ## Team
 [Alberto Cagnazzo](https://github.com/LienoPC)
 [Giulio Arecco](https://github.com/giulio-arecco)
+
+## License
+The original code in this repository is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+
+**Third-Party Code:** 
+This repository includes third-party libraries and code (the OS161 kernel code). These files remain licensed under their respective original terms and retain their original copyright notices.
